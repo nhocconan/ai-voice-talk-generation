@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { useRouter } from "next/navigation"
+import { signIn } from "next-auth/react"
 import { trpc } from "@/lib/trpc/client"
 
 const schema = z.object({
@@ -30,7 +31,19 @@ export function AcceptInviteForm({ searchParams }: { searchParams: Promise<{ tok
     setServerError(null)
     try {
       await accept.mutateAsync({ token, name: data.name, password: data.password })
-      router.push("/login?invited=1")
+      const authResult = await signIn("credentials", {
+        email: tokenData?.email ?? "",
+        password: data.password,
+        redirect: false,
+      })
+
+      if (authResult?.error) {
+        router.push("/login?invited=1")
+        return
+      }
+
+      router.push("/app/dashboard")
+      router.refresh()
     } catch (e) {
       setServerError(e instanceof Error ? e.message : "An error occurred")
     }
