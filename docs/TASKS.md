@@ -12,7 +12,7 @@ Every task below has acceptance criteria (AC). A task is **done** only when all 
 
 Goal: repo exists, tooling works, one-command local bring-up. Must finish before Phase 1.
 
-- [ ] **P0-01** Init monorepo (pnpm workspaces, TS config, ESLint flat, Prettier, ruff, mypy, editorconfig).
+- [x] **P0-01** Init monorepo (pnpm workspaces, TS config, ESLint flat, Prettier, ruff, mypy, editorconfig). · verified 2026-04-19 · direct main commit https://github.com/nhocconan/ai-voice-talk-generation/commit/873d8a5
   - AC: `pnpm install && pnpm verify` succeeds on a clean clone. Empty `apps/web`, `apps/worker`, `packages/*` scaffolded. CI skeleton (`lint-types`) passes.
   - DoD: Universal, E (Infra).
 - [ ] **P0-02** Docker Compose infra (`postgres`, `redis`, `minio`, `caddy`).
