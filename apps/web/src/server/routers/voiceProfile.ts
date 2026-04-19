@@ -5,7 +5,7 @@ import { generatePresignedPutUrl, generatePresignedGetUrl } from "@/server/servi
 import { enqueueIngestJob } from "@/server/queue/producers"
 import crypto from "crypto"
 
-const ALLOWED_AUDIO_MIMES = ["audio/mpeg", "audio/mp4", "audio/x-m4a", "audio/wav", "audio/flac", "audio/ogg"]
+const ALLOWED_AUDIO_MIMES = ["audio/mpeg", "audio/mp4", "audio/x-m4a", "audio/wav", "audio/flac", "audio/ogg", "audio/webm"]
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 
 export const voiceProfileRouter = router({

@@ -1,70 +1,58 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { api } from "@/lib/trpc/client";
+import { useMemo, useState } from "react"
+import { trpc } from "@/lib/trpc/client"
+import { parseTimedScript } from "@/lib/timed-script"
 import { ProfileSelector } from "./ProfileSelector";
 import { GenerationProgress } from "./GenerationProgress";
 
-interface TimedSegment {
-  speaker: "host" | "guest";
-  text: string;
-}
+const DEFAULT_SCRIPT = `[00:00 A] Xin chao va chao mung den voi ban tin hom nay.\n[00:08 B] Cam on ban. Chung ta se bat dau voi cac cap nhat moi nhat.`
 
 export function PodcastGenerator() {
-  const [hostProfileId, setHostProfileId] = useState("");
-  const [guestProfileId, setGuestProfileId] = useState("");
-  const [lang, setLang] = useState("vi");
-  const [speed, setSpeed] = useState(1.0);
-  const [segments, setSegments] = useState<TimedSegment[]>([
-    { speaker: "host", text: "" },
-    { speaker: "guest", text: "" },
-  ]);
-  const [generationId, setGenerationId] = useState<string | null>(null);
+  const [profileAId, setProfileAId] = useState("")
+  const [profileBId, setProfileBId] = useState("")
+  const [script, setScript] = useState(DEFAULT_SCRIPT)
+  const [generationId, setGenerationId] = useState<string | null>(null)
+  const [parseError, setParseError] = useState<string | null>(null)
 
-  const utils = api.useUtils();
-  const mutation = api.generation.createPodcast.useMutation({
+  const utils = trpc.useUtils()
+  const mutation = trpc.generation.createPodcast.useMutation({
     onSuccess: (data) => {
-      setGenerationId(data.generationId);
-      void utils.generation.list.invalidate();
+      setGenerationId(data.generationId)
+      void utils.generation.list.invalidate()
     },
-  });
+  })
 
-  function addSegment() {
-    setSegments((prev) => [
-      ...prev,
-      { speaker: prev[prev.length - 1]?.speaker === "host" ? "guest" : "host", text: "" },
-    ]);
-  }
+  const estimatedMinutes = useMemo(() => {
+    const segments = parseTimedScript(script)
+    const lastEndMs = segments.at(-1)?.endMs ?? 30_000
+    return Math.max(0.5, Math.min(60, lastEndMs / 60_000))
+  }, [script])
 
-  function updateSegment(idx: number, field: keyof TimedSegment, value: string) {
-    setSegments((prev) =>
-      prev.map((s, i) => (i === idx ? { ...s, [field]: value } : s))
-    );
-  }
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
 
-  function removeSegment(idx: number) {
-    if (segments.length <= 2) return;
-    setSegments((prev) => prev.filter((_, i) => i !== idx));
-  }
+    try {
+      const segments = parseTimedScript(script)
+      setParseError(null)
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!hostProfileId) return;
+      const speakers = (["A", "B"] as const)
+        .map((label) => ({
+          label,
+          profileId: label === "A" ? profileAId : (profileBId || profileAId),
+          segments: segments
+            .filter((segment) => segment.label === label)
+            .map(({ startMs, endMs, text }) => ({ startMs, endMs, text })),
+        }))
+        .filter((speaker) => speaker.profileId && speaker.segments.length > 0)
 
-    const script = {
-      segments: segments.map((s) => ({
-        speaker: s.speaker,
-        text: s.text,
-      })),
-    };
-
-    mutation.mutate({
-      hostProfileId,
-      guestProfileId: guestProfileId || hostProfileId,
-      lang,
-      speed,
-      timedScript: JSON.stringify(script),
-    });
+      mutation.mutate({
+        estimatedMinutes,
+        speakers,
+      })
+    } catch (error) {
+      setParseError(error instanceof Error ? error.message : "Timed script is invalid")
+    }
   }
 
   if (generationId) {
@@ -73,119 +61,54 @@ export function PodcastGenerator() {
         generationId={generationId}
         onReset={() => setGenerationId(null)}
       />
-    );
+    )
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Host (Speaker A)</h2>
+          <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Speaker A</h2>
           <ProfileSelector
-            value={hostProfileId}
-            onChange={setHostProfileId}
-            placeholder="Select host voice..."
-            required
+            value={profileAId}
+            onChange={setProfileAId}
           />
         </div>
         <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Guest (Speaker B)</h2>
+          <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Speaker B</h2>
           <ProfileSelector
-            value={guestProfileId}
-            onChange={setGuestProfileId}
-            placeholder="Same as host (leave empty) or select..."
+            value={profileBId}
+            onChange={setProfileBId}
           />
           <p className="text-xs text-[var(--color-text-tertiary)]">
-            Leave empty to use the same voice as host
+            Leave empty to reuse speaker A&apos;s voice.
           </p>
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-[var(--color-text-primary)]">Language</label>
-          <select
-            value={lang}
-            onChange={(e) => setLang(e.target.value)}
-            className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] px-3 py-2 text-sm focus:border-[var(--color-accent)] focus:outline-none"
-          >
-            <option value="vi">Vietnamese</option>
-            <option value="en">English</option>
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-[var(--color-text-primary)]">
-            Speed: {speed.toFixed(1)}x
-          </label>
-          <input
-            type="range"
-            min="0.5"
-            max="2.0"
-            step="0.1"
-            value={speed}
-            onChange={(e) => setSpeed(parseFloat(e.target.value))}
-            className="w-full accent-[var(--color-accent)]"
-          />
-        </div>
-      </div>
-
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Script Segments</h2>
-          <button
-            type="button"
-            onClick={addSegment}
-            className="text-xs text-[var(--color-accent)] hover:underline"
-          >
-            + Add segment
-          </button>
-        </div>
-
-        {segments.map((seg, idx) => (
-          <div
-            key={idx}
-            className="flex gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3"
-          >
-            <div className="w-28 flex-shrink-0">
-              <select
-                value={seg.speaker}
-                onChange={(e) => updateSegment(idx, "speaker", e.target.value)}
-                className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface-1)] px-2 py-1.5 text-xs focus:outline-none"
-              >
-                <option value="host">Host</option>
-                <option value="guest">Guest</option>
-              </select>
-            </div>
-            <textarea
-              value={seg.text}
-              onChange={(e) => updateSegment(idx, "text", e.target.value)}
-              placeholder={`${seg.speaker === "host" ? "Host" : "Guest"} line...`}
-              rows={2}
-              className="flex-1 resize-none rounded border border-[var(--color-border)] bg-[var(--color-surface-1)] px-3 py-2 text-sm focus:border-[var(--color-accent)] focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={() => removeSegment(idx)}
-              disabled={segments.length <= 2}
-              className="self-start text-[var(--color-text-tertiary)] hover:text-red-500 disabled:opacity-30"
-            >
-              ✕
-            </button>
-          </div>
-        ))}
+        <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Timed Script</h2>
+        <textarea
+          value={script}
+          onChange={(event) => setScript(event.target.value)}
+          rows={10}
+          className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] px-3 py-2 text-sm focus:border-[var(--color-accent)] focus:outline-none"
+        />
+        <p className="text-xs text-[var(--color-text-tertiary)]">
+          Format each line as <code>[MM:SS A] text</code> or <code>[MM:SS B] text</code>.
+        </p>
       </div>
 
-      {mutation.error && (
-        <p className="text-sm text-red-500">{mutation.error.message}</p>
-      )}
+      {parseError && <p className="text-sm text-red-500">{parseError}</p>}
+      {mutation.error && <p className="text-sm text-red-500">{mutation.error.message}</p>}
 
       <button
         type="submit"
-        disabled={mutation.isPending || !hostProfileId || segments.every((s) => !s.text.trim())}
+        disabled={mutation.isPending || !profileAId || !script.trim()}
         className="rounded-[var(--radius-warm-btn)] bg-[var(--color-accent)] px-6 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
       >
-        {mutation.isPending ? "Generating..." : "Generate Podcast"}
+        {mutation.isPending ? "Generating..." : `Generate Podcast (${estimatedMinutes.toFixed(1)} min)`}
       </button>
     </form>
-  );
+  )
 }

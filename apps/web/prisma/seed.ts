@@ -1,4 +1,4 @@
-import { PrismaClient, Role, ProviderName } from "@prisma/client"
+import { Prisma, PrismaClient, Role, ProviderName } from "@prisma/client"
 import bcrypt from "bcryptjs"
 
 const prisma = new PrismaClient()
@@ -65,7 +65,7 @@ async function main() {
   })
 
   // Default settings
-  const settings: Array<{ key: string; value: unknown }> = [
+  const settings: Array<{ key: string; value: Prisma.InputJsonValue }> = [
     { key: "retention.renderDays", value: 90 },
     { key: "quota.defaultMinutes", value: 60 },
     { key: "generation.maxMinutes", value: 60 },
@@ -86,8 +86,8 @@ async function main() {
 }
 
 main()
-  .catch((e) => {
-    console.error(e)
+  .catch((error: unknown) => {
+    console.error(error)
     process.exit(1)
   })
   .finally(() => prisma.$disconnect())

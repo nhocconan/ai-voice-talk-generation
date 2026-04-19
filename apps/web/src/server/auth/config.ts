@@ -2,6 +2,7 @@ import type { NextAuthConfig } from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
+import { env } from "@/env"
 import { db } from "@/server/db/client"
 import { writeAuditLog } from "@/server/services/audit"
 
@@ -35,7 +36,7 @@ export const authConfig: NextAuthConfig = {
           action: "auth.login",
           targetType: "User",
           targetId: user.id,
-          ip,
+          ...(ip ? { ip } : {}),
         })
 
         return {
@@ -51,17 +52,17 @@ export const authConfig: NextAuthConfig = {
   callbacks: {
     jwt({ token, user }) {
       if (user) {
-        token.id = user.id
-        token.role = (user as { role: string }).role
-        token.forcePasswordChange = (user as { forcePasswordChange: boolean }).forcePasswordChange
+        token["id"] = user.id
+        token["role"] = user.role
+        token["forcePasswordChange"] = user.forcePasswordChange
       }
       return token
     },
     session({ session, token }) {
       if (token) {
-        session.user.id = token.id as string
-        session.user.role = token.role as string
-        session.user.forcePasswordChange = token.forcePasswordChange as boolean
+        session.user.id = token["id"] as string
+        session.user.role = token["role"] as typeof session.user.role
+        session.user.forcePasswordChange = Boolean(token["forcePasswordChange"])
       }
       return session
     },
@@ -82,7 +83,7 @@ export const authConfig: NextAuthConfig = {
         return Response.redirect(new URL("/app", nextUrl))
       }
 
-      if (isLoggedIn && auth.user.forcePasswordChange) {
+      if (isLoggedIn && auth.user?.forcePasswordChange) {
         const isChangePwPage = nextUrl.pathname === "/app/change-password"
         if (!isChangePwPage && isAppPath) {
           return Response.redirect(new URL("/app/change-password", nextUrl))
@@ -97,5 +98,5 @@ export const authConfig: NextAuthConfig = {
     error: "/login",
   },
   session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
-  secret: process.env.AUTH_SECRET,
+  secret: env.AUTH_SECRET,
 }

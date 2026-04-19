@@ -53,10 +53,6 @@ export function VoiceProfileList() {
   )
 }
 
-function QualityBadgeShim() {
-  return <div className="h-5 w-20 bg-[var(--color-surface-1)] rounded animate-pulse" />
-}
-
 function ProfileSkeleton() {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

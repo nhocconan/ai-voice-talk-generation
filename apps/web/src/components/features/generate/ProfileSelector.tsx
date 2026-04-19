@@ -5,13 +5,19 @@ import { cn } from "@/lib/utils"
 import { MicIcon } from "lucide-react"
 
 interface Props {
-  selected: string
-  onSelect: (id: string) => void
+  selected?: string
+  onSelect?: (id: string) => void
+  value?: string
+  onChange?: (id: string) => void
+  placeholder?: string
+  required?: boolean
   exclude?: string[]
 }
 
-export function ProfileSelector({ selected, onSelect, exclude = [] }: Props) {
+export function ProfileSelector({ selected, onSelect, value, onChange, exclude = [] }: Props) {
   const { data: profiles, isLoading } = trpc.voiceProfile.list.useQuery()
+  const currentValue = selected ?? value ?? ""
+  const handleSelect = onSelect ?? onChange ?? (() => undefined)
   const available = profiles?.filter((p) => !exclude.includes(p.id)) ?? []
 
   if (isLoading) return <div className="h-12 bg-[var(--color-surface-1)] animate-pulse rounded-[var(--radius-md)]" />
@@ -32,10 +38,10 @@ export function ProfileSelector({ selected, onSelect, exclude = [] }: Props) {
           <button
             key={p.id}
             type="button"
-            onClick={() => onSelect(p.id)}
+            onClick={() => handleSelect(p.id)}
             className={cn(
               "flex items-center gap-3 p-3 rounded-[var(--radius-md)] border text-left transition-colors",
-              selected === p.id
+              currentValue === p.id
                 ? "border-black bg-[var(--color-surface-1)]"
                 : "border-[var(--color-border)] hover:bg-[var(--color-surface-1)]",
             )}
@@ -49,7 +55,7 @@ export function ProfileSelector({ selected, onSelect, exclude = [] }: Props) {
                 {p.lang.toUpperCase()} {latestScore !== undefined ? `· ${latestScore}/100` : ""}
               </div>
             </div>
-            {selected === p.id && <div className="w-2 h-2 rounded-full bg-black shrink-0" />}
+            {currentValue === p.id && <div className="w-2 h-2 rounded-full bg-black shrink-0" />}
           </button>
         )
       })}

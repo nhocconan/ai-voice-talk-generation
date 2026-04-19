@@ -20,8 +20,8 @@ export function SettingsPanel() {
 
   return (
     <div
-      className="bg-[var(--color-surface-0)] rounded-[var(--radius-card)] divide-y"
-      style={{ boxShadow: "var(--shadow-outline-ring), var(--shadow-soft-lift)", divideColor: "var(--color-border)" }}
+      className="bg-[var(--color-surface-0)] rounded-[var(--radius-card)] divide-y divide-[var(--color-border)]"
+      style={{ boxShadow: "var(--shadow-outline-ring), var(--shadow-soft-lift)" }}
     >
       {EDITABLE_SETTINGS.map(({ key, label, type }) => {
         const current = settings[key]

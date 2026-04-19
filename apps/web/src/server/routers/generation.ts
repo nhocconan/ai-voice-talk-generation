@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server"
 import { router, protectedProcedure, adminProcedure } from "@/server/trpc"
 import { enqueueRenderJob, enqueueAsrJob } from "@/server/queue/producers"
 import { generatePresignedGetUrl, generatePresignedPutUrl } from "@/server/services/storage"
+import { db } from "@/server/db/client"
 import { GenKind, GenStatus } from "@prisma/client"
 import crypto from "crypto"
 
@@ -268,14 +269,20 @@ export const generationRouter = router({
     }),
 })
 
-async function enforceQuota(ctx: { db: ReturnType<typeof import("@/server/db/client")["db"]["$connect"] extends infer _U ? typeof import("@/server/db/client").db : never>; session: { user: { id: string } } }, estimatedMinutes: number): Promise<void> {
-  const user = await (ctx.db as import("@/server/db/client").db extends infer _U ? typeof import("@/server/db/client").db : never).user.findUniqueOrThrow({ where: { id: ctx.session.user.id }, select: { quotaMinutes: true, usedMinutes: true } })
+async function enforceQuota(
+  ctx: { db: typeof db; session: { user: { id: string } } },
+  estimatedMinutes: number,
+): Promise<void> {
+  const user = await ctx.db.user.findUniqueOrThrow({
+    where: { id: ctx.session.user.id },
+    select: { quotaMinutes: true, usedMinutes: true },
+  })
   if (user.usedMinutes + estimatedMinutes > user.quotaMinutes) {
     throw new TRPCError({ code: "FORBIDDEN", message: `Monthly quota exceeded (${user.usedMinutes}/${user.quotaMinutes} min used)` })
   }
 }
 
-async function resolveProvider(ctx: { db: typeof import("@/server/db/client").db }, providerId: string | undefined): Promise<string> {
+async function resolveProvider(ctx: { db: typeof db }, providerId: string | undefined): Promise<string> {
   if (providerId) {
     const p = await ctx.db.providerConfig.findFirst({ where: { id: providerId, enabled: true } })
     if (!p) throw new TRPCError({ code: "BAD_REQUEST", message: "Provider not available" })
