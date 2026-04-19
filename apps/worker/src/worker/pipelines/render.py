@@ -1,21 +1,21 @@
 """Render pipeline: script → chunks → TTS → stitch → encode → upload."""
+
 from __future__ import annotations
 
 import asyncio
 import io
-import tempfile
 import re
+import tempfile
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Callable, Awaitable
 
 import soundfile as sf
-import numpy as np
 
 from ..audio.io import encode_mp3, encode_wav_24bit, get_duration_ms
 from ..audio.stitch import stitch_segments
+from ..logging import get_logger
 from ..providers.base import TTSProvider, VoiceRef
 from ..services.storage import download_object, upload_object
-from ..logging import get_logger
 
 logger = get_logger("pipeline.render")
 
@@ -110,7 +110,9 @@ async def _render_presentation(
     progress_fn,
     generation_id: str,
 ) -> Path:
-    script: str = speaker.get("script") or "\n".join(seg["text"] for seg in speaker.get("segments", []))
+    script: str = speaker.get("script") or "\n".join(
+        seg["text"] for seg in speaker.get("segments", [])
+    )
     chunks = _chunk_text(script, provider.max_chunk_chars, lang=speaker.get("lang", "vi"))
     logger.info("Chunked script", chunks=len(chunks))
 
@@ -119,7 +121,9 @@ async def _render_presentation(
         progress = 0.1 + (i / len(chunks)) * 0.7
         await progress_fn(generation_id, progress, f"Rendering chunk {i + 1}/{len(chunks)}")
 
-        audio_bytes = await provider.synthesize(chunk, voice_ref or VoiceRef("", {}), speaker.get("lang", "vi"))
+        audio_bytes = await provider.synthesize(
+            chunk, voice_ref or VoiceRef("", {}), speaker.get("lang", "vi")
+        )
         seg_path = tmp_dir / f"seg_{i:04d}.wav"
         _bytes_to_wav(audio_bytes, seg_path)
         segment_wavs.append(seg_path)
@@ -172,6 +176,7 @@ def _chunk_text(text: str, max_chars: int, lang: str = "vi") -> list[str]:
     if lang == "vi":
         try:
             from underthesea import sent_tokenize  # type: ignore[import]
+
             sentences = sent_tokenize(text)
         except Exception:
             sentences = _simple_sentence_split(text)
@@ -189,7 +194,7 @@ def _chunk_text(text: str, max_chars: int, lang: str = "vi") -> list[str]:
             if len(sent) > max_chars:
                 # Hard split
                 for j in range(0, len(sent), max_chars):
-                    chunks.append(sent[j:j + max_chars])
+                    chunks.append(sent[j : j + max_chars])
                 current = ""
             else:
                 current = sent
@@ -213,13 +218,28 @@ def _bytes_to_wav(audio_bytes: bytes, path: Path) -> None:
             data = data[:, 0]
         if sr != SAMPLE_RATE:
             import librosa  # type: ignore[import]
+
             data = librosa.resample(data, orig_sr=sr, target_sr=SAMPLE_RATE)
         sf.write(str(path), data, SAMPLE_RATE, subtype="PCM_16")
     except Exception:
         # Fallback: decode via ffmpeg
         import subprocess
+
         proc = subprocess.run(
-            ["ffmpeg", "-y", "-i", "pipe:0", "-ar", str(SAMPLE_RATE), "-ac", "1", "-f", "wav", "pipe:1"],
-            input=audio_bytes, capture_output=True,
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                "pipe:0",
+                "-ar",
+                str(SAMPLE_RATE),
+                "-ac",
+                "1",
+                "-f",
+                "wav",
+                "pipe:1",
+            ],
+            input=audio_bytes,
+            capture_output=True,
         )
         path.write_bytes(proc.stdout)

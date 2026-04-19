@@ -1,6 +1,8 @@
+from pathlib import Path
+
 import boto3
 from botocore.client import Config
-from pathlib import Path
+
 from ..config import settings
 
 
@@ -21,7 +23,11 @@ def download_object(key: str, dest: Path) -> None:
     _client().download_file(settings.minio_bucket, key, str(dest))
 
 
-def upload_object(local_path: Path, key: str, content_type: str = "application/octet-stream") -> None:
+def upload_object(
+    local_path: Path,
+    key: str,
+    content_type: str = "application/octet-stream",
+) -> None:
     _client().upload_file(
         str(local_path),
         settings.minio_bucket,

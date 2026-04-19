@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import ClassVar
+
 import httpx
 
-from .base import VoiceRef, AudioBytes
 from ..config import settings
 from ..logging import get_logger
 from ..services.crypto import decrypt_api_key
+from .base import AudioBytes, VoiceRef
 
 logger = get_logger("provider.elevenlabs")
 
@@ -16,7 +18,17 @@ BASE_URL = "https://api.elevenlabs.io/v1"
 
 class ElevenLabsProvider:
     name = "ELEVENLABS"
-    supported_languages = ["vi", "en", "zh", "fr", "de", "es", "pt", "ja", "ko"]
+    supported_languages: ClassVar[list[str]] = [
+        "vi",
+        "en",
+        "zh",
+        "fr",
+        "de",
+        "es",
+        "pt",
+        "ja",
+        "ko",
+    ]
     max_chunk_chars = 2500
 
     def __init__(self, api_key_enc: str | None = None) -> None:
@@ -38,7 +50,9 @@ class ElevenLabsProvider:
             logger.info("ElevenLabs voice cloned", voice_id=voice_id)
             return VoiceRef(provider_name=self.name, data={"voice_id": voice_id})
 
-    async def synthesize(self, text: str, voice: VoiceRef, lang: str, speed: float = 1.0) -> AudioBytes:
+    async def synthesize(
+        self, text: str, voice: VoiceRef, lang: str, speed: float = 1.0
+    ) -> AudioBytes:
         voice_id = voice.data["voice_id"]
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
@@ -47,7 +61,12 @@ class ElevenLabsProvider:
                 json={
                     "text": text,
                     "model_id": "eleven_multilingual_v2",
-                    "voice_settings": {"stability": 0.5, "similarity_boost": 0.8, "style": 0.0, "use_speaker_boost": True},
+                    "voice_settings": {
+                        "stability": 0.5,
+                        "similarity_boost": 0.8,
+                        "style": 0.0,
+                        "use_speaker_boost": True,
+                    },
                 },
             )
             resp.raise_for_status()

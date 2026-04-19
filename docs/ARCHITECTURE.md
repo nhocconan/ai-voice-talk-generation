@@ -13,7 +13,7 @@
 │  Next.js server (Node 22)        │    │  MinIO (S3-compat)   │
 │   · Route handlers / tRPC        │    │   · reference audio  │
 │   · Prisma + Postgres            │    │   · outputs mp3/wav  │
-│   · BullMQ job producer          │    │   · presigned uploads│
+│   · Redis Streams job producer   │    │   · presigned uploads│
 │   · Auth.js (email/pw invite)    │    └──────────────────────┘
 │   · Admin CP                     │
 └─────────┬──────────────────┬─────┘
@@ -21,7 +21,7 @@
           ▼                  ▼
 ┌──────────────────┐   ┌────────────────────┐
 │  Redis 7         │   │  Postgres 16       │
-│   · BullMQ queue │   │   · Prisma schema  │
+│   · Redis Streams │   │   · Prisma schema │
 │   · Rate limits  │   │   · Row-level locks│
 │   · SSE pub/sub  │   │   · Audit append   │
 └──────────────────┘   └────────────────────┘
@@ -29,7 +29,7 @@
           │ pops jobs
           ▼
 ┌──────────────────────────────────────────────────────────────┐
-│  Python 3.11 Worker (FastAPI admin + RQ/BullMQ consumer)     │
+│  Python 3.11 Worker (FastAPI admin + Redis Streams consumer) │
 │  ──────────────────────────────────────────────────────────  │
 │  Ingest pipeline                                             │
 │   · ffmpeg resample → 24kHz mono WAV                         │
@@ -69,7 +69,7 @@
 
 ### 2.2 Python worker (inference)
 - Stateless. Scales horizontally (N worker processes per host; 1 on Mac, N on Linux+GPU).
-- Pulls jobs from BullMQ via `python-rq`-style adapter (or a thin custom consumer — see §6).
+- Pulls jobs from explicit Redis Streams (`render`, `ingest`, `asr`) via a thin custom consumer.
 - Reads/writes MinIO via presigned URLs issued by the server (workers do not hold root S3 creds).
 - Posts progress events back via Redis pub/sub.
 - Provider adapters behind a single `TTSProvider` protocol — swap via settings, not code.
@@ -80,7 +80,7 @@
 - All timestamps UTC with `TIMESTAMPTZ`.
 
 ### 2.4 Redis
-- BullMQ queues (`render`, `ingest`, `asr`).
+- Redis Streams (`render`, `ingest`, `asr`).
 - SSE pub/sub channels (`job:<id>:events`).
 - Rate-limit counters (sliding window via Upstash/ratelimit algorithm).
 
@@ -264,7 +264,7 @@ Implementations: `XTTSProvider`, `F5Provider`, `ElevenLabsProvider`, `GeminiTTSP
 
 ## 5. Job Contracts
 
-All jobs serialize to JSON. Stored by BullMQ; worker deserializes via pydantic model.
+All jobs serialize to JSON in Redis Streams; worker deserializes via pydantic model.
 
 ### 5.1 `ingest.enroll`
 ```json
@@ -306,9 +306,7 @@ Workers post progress events to Redis channel `job:<generationId>:events` as:
 
 ## 6. Cross-Language Queue Bridge
 
-BullMQ is Node-native. We use the **`bullmq-python`** consumer (or hand-rolled Redis streams consumer if blocked). Server publishes on Node side; worker consumes on Python side. Both sides validate the same JSON schema — kept in `/packages/contracts` (TypeScript types generated from pydantic models via `datamodel-code-generator`).
-
-Fallback if bullmq-python proves unstable: use **Redis Streams** directly with `XADD`/`XREADGROUP` — simpler and language-neutral.
+The queue boundary is implemented directly on **Redis Streams** with `XADD` on the web side and `XREADGROUP` in the worker. Both sides validate the same payload shape, with TypeScript contracts under `/packages/contracts` and pydantic models under `apps/worker/src/worker/job_payloads.py`.
 
 ## 7. Security
 

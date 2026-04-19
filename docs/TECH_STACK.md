@@ -10,7 +10,7 @@ Pinned versions are intentional — see `CODING_GUIDELINES.md` for upgrade polic
 │   ├── web/              # Next.js 15, TS, tRPC, Auth.js v5
 │   └── worker/           # Python 3.11, FastAPI, inference
 ├── packages/
-│   ├── contracts/        # Shared JSON schemas / TS types / pydantic models (generated)
+│   ├── contracts/        # Shared queue payload contracts / TS types
 │   ├── ui/               # Shared React components, design tokens
 │   └── config/           # ESLint, TS, Tailwind, Prettier configs
 ├── infra/
@@ -34,7 +34,7 @@ Pinned versions are intentional — see `CODING_GUIDELINES.md` for upgrade polic
 | API | tRPC | 11.x | End-to-end types, no code gen |
 | Auth | Auth.js | v5 | Credentials provider; invite-only |
 | ORM | Prisma | 5.x | Postgres adapter, typed client |
-| Queue client | BullMQ | 5.x | Producer side in Node |
+| Queue client | Redis Streams via ioredis | 5.x | Web publishes `XADD` jobs to Redis Streams |
 | Storage client | `@aws-sdk/client-s3` | 3.x | For MinIO presigned URLs |
 | Validation | Zod | 3.x | Single source of truth for runtime + types |
 | i18n | next-intl | 3.x | vi + en message catalogs |
@@ -50,8 +50,8 @@ Pinned versions are intentional — see `CODING_GUIDELINES.md` for upgrade polic
 | Runtime | Python | 3.11 | |
 | Package manager | uv | latest | `uv sync`, `uv run`; faster than pip |
 | App framework | FastAPI | 0.115+ | Health, admin ops, provider probing |
-| Queue consumer | Redis Streams (or bullmq-python) | — | Streams is our fallback; see ARCHITECTURE §6 |
-| Data validation | pydantic | 2.x | Generates TS types via datamodel-code-generator |
+| Queue consumer | Redis Streams | — | Explicit `XREADGROUP` consumers per queue |
+| Data validation | pydantic | 2.x | Worker validates queue payloads at the boundary |
 | Audio I/O | ffmpeg + pydub | — | ffmpeg is the workhorse; pydub for stitching |
 | VAD | silero-vad | latest | Lightweight, CPU-friendly |
 | Loudness | pyloudnorm | latest | BS.1770 |
@@ -160,3 +160,4 @@ WORKER_CONCURRENCY=1
 
 ## Changelog
 - 2026-04-19: v1.0 initial stack.
+- 2026-04-19: Updated queue transport to Redis Streams and aligned worker/web contract notes with the implementation.

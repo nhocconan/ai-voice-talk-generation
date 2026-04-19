@@ -2,7 +2,6 @@
 import asyncio
 from pathlib import Path
 
-
 SAMPLE_RATE = 24000
 CHANNELS = 1
 
@@ -50,7 +49,11 @@ async def encode_mp3(src_wav: Path, dest_mp3: Path, bitrate: str = "320k") -> No
         "-id3v2_version", "3",
         str(dest_mp3),
     ]
-    proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
     _, stderr = await proc.communicate()
     if proc.returncode != 0:
         raise RuntimeError(f"MP3 encode failed: {stderr.decode()}")
@@ -64,7 +67,11 @@ async def encode_wav_24bit(src: Path, dest: Path) -> None:
         "-ac", "1",
         str(dest),
     ]
-    proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
     _, stderr = await proc.communicate()
     if proc.returncode != 0:
         raise RuntimeError(f"WAV 24-bit encode failed: {stderr.decode()}")
@@ -76,7 +83,11 @@ async def get_duration_ms(path: Path) -> int:
         "ffprobe", "-v", "quiet", "-print_format", "json",
         "-show_streams", str(path),
     ]
-    proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
     stdout, _ = await proc.communicate()
     import json
     data = json.loads(stdout)

@@ -1,16 +1,21 @@
 """Provider factory — instantiate the right provider from a config dict."""
 from __future__ import annotations
+
 from typing import Any
 
 from .base import TTSProvider
-from .xtts import XTTSProvider
 from .elevenlabs import ElevenLabsProvider
 from .gemini_tts import GeminiTTSProvider
+from .xtts import XTTSProvider
 
 _INSTANCES: dict[str, TTSProvider] = {}
 
 
-def get_provider(name: str, api_key_enc: str | None = None, config: dict[str, Any] | None = None) -> TTSProvider:
+def get_provider(
+    name: str,
+    api_key_enc: str | None = None,
+    config: dict[str, Any] | None = None,
+) -> TTSProvider:
     cache_key = f"{name}:{api_key_enc or ''}"
     if cache_key in _INSTANCES:
         return _INSTANCES[cache_key]

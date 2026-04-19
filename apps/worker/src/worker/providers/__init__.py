@@ -1,3 +1,3 @@
-from .base import TTSProvider, VoiceRef, AudioBytes
+from .base import AudioBytes, TTSProvider, VoiceRef
 
-__all__ = ["TTSProvider", "VoiceRef", "AudioBytes"]
+__all__ = ["AudioBytes", "TTSProvider", "VoiceRef"]
