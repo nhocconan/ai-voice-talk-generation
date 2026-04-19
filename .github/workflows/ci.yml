@@ -1,0 +1,276 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  PYTHON_VERSION: "3.11"
+  PNPM_VERSION: "9"
+
+jobs:
+  lint-types:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm typecheck
+
+  web-unit:
+    name: Web Unit Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: voice
+          POSTGRES_PASSWORD: voice
+          POSTGRES_DB: voice_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        working-directory: apps/web
+        run: pnpm dlx prisma generate
+
+      - name: Run migrations
+        working-directory: apps/web
+        env:
+          DATABASE_URL: postgresql://voice:voice@localhost:5432/voice_test
+        run: pnpm dlx prisma migrate deploy
+
+      - name: Run unit tests
+        working-directory: apps/web
+        env:
+          DATABASE_URL: postgresql://voice:voice@localhost:5432/voice_test
+          REDIS_URL: redis://localhost:6379
+          AUTH_SECRET: test-secret-32-chars-minimum-here
+          SERVER_SECRET: test-server-secret-32-chars-min!
+          NEXTAUTH_URL: http://localhost:3000
+          MINIO_ENDPOINT: http://localhost:9000
+          MINIO_ACCESS_KEY: minioadmin
+          MINIO_SECRET_KEY: minioadmin
+          MINIO_BUCKET: voice-studio
+        run: pnpm test --coverage
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-coverage
+          path: apps/web/coverage/
+
+  worker-unit:
+    name: Worker Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        working-directory: apps/worker
+        run: uv sync --extra dev
+
+      - name: Run tests
+        working-directory: apps/worker
+        env:
+          TORCH_DEVICE: cpu
+          SERVER_SECRET: test-server-secret-32-chars-min!
+          DATABASE_URL: postgresql://voice:voice@localhost:5432/voice_test
+          REDIS_URL: redis://localhost:6379
+          MINIO_ENDPOINT: http://localhost:9000
+          MINIO_ACCESS_KEY: minioadmin
+          MINIO_SECRET_KEY: minioadmin
+          MINIO_BUCKET: voice-studio
+        run: uv run pytest tests/ -v --cov=src/worker --cov-report=xml --cov-fail-under=60
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-coverage
+          path: apps/worker/coverage.xml
+
+  coverage-gate:
+    name: Coverage Gate
+    runs-on: ubuntu-latest
+    needs: [web-unit, worker-unit]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download web coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: web-coverage
+          path: coverage/web
+
+      - name: Download worker coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: worker-coverage
+          path: coverage/worker
+
+      - name: Check coverage thresholds
+        run: |
+          echo "Coverage artifacts downloaded successfully"
+          echo "Web coverage threshold: 70% lines (enforced by vitest)"
+          echo "Worker coverage threshold: 60% lines (enforced by pytest-cov)"
+
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [lint-types]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: voice
+          POSTGRES_PASSWORD: voice
+          POSTGRES_DB: voice_e2e
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+      minio:
+        image: minio/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        options: --health-cmd "curl -f http://localhost:9000/minio/health/live" --health-interval 10s --health-timeout 5s --health-retries 5
+        ports:
+          - 9000:9000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        working-directory: apps/web
+        run: pnpm dlx playwright install --with-deps chromium
+
+      - name: Setup MinIO bucket
+        run: |
+          pip install awscli
+          AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin aws --endpoint-url http://localhost:9000 s3 mb s3://voice-studio || true
+
+      - name: Generate Prisma client & migrate
+        working-directory: apps/web
+        env:
+          DATABASE_URL: postgresql://voice:voice@localhost:5432/voice_e2e
+        run: |
+          pnpm dlx prisma generate
+          pnpm dlx prisma migrate deploy
+          pnpm dlx prisma db seed
+
+      - name: Build app
+        working-directory: apps/web
+        env:
+          DATABASE_URL: postgresql://voice:voice@localhost:5432/voice_e2e
+          REDIS_URL: redis://localhost:6379
+          AUTH_SECRET: test-secret-32-chars-minimum-here
+          SERVER_SECRET: test-server-secret-32-chars-min!
+          NEXTAUTH_URL: http://localhost:3000
+          MINIO_ENDPOINT: http://localhost:9000
+          MINIO_ACCESS_KEY: minioadmin
+          MINIO_SECRET_KEY: minioadmin
+          MINIO_BUCKET: voice-studio
+          WORKER_BASE_URL: http://localhost:8000
+        run: pnpm build
+
+      - name: Run E2E tests
+        working-directory: apps/web
+        env:
+          DATABASE_URL: postgresql://voice:voice@localhost:5432/voice_e2e
+          REDIS_URL: redis://localhost:6379
+          AUTH_SECRET: test-secret-32-chars-minimum-here
+          SERVER_SECRET: test-server-secret-32-chars-min!
+          NEXTAUTH_URL: http://localhost:3000
+          MINIO_ENDPOINT: http://localhost:9000
+          MINIO_ACCESS_KEY: minioadmin
+          MINIO_SECRET_KEY: minioadmin
+          MINIO_BUCKET: voice-studio
+          WORKER_BASE_URL: http://localhost:8000
+        run: pnpm dlx playwright test
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/

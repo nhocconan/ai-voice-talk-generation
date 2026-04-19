@@ -1,0 +1,33 @@
+{
+  "name": "yng-voice-studio",
+  "private": true,
+  "version": "0.1.0",
+  "description": "YouNet Voice Studio — voice cloning, presentation & podcast generator",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm --filter web dev",
+    "worker:dev": "cd apps/worker && uv run python -m worker.main",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:integration": "pnpm -r test:integration",
+    "e2e": "pnpm --filter web e2e",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test",
+    "db:generate": "pnpm --filter web prisma generate",
+    "db:migrate": "pnpm --filter web prisma migrate deploy",
+    "db:migrate:dev": "pnpm --filter web prisma migrate dev",
+    "db:seed": "pnpm --filter web tsx prisma/seed.ts",
+    "db:studio": "pnpm --filter web prisma studio",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.4"
+}

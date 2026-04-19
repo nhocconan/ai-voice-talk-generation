@@ -1,0 +1,177 @@
+/* YouNet Voice Studio — Design tokens (derived from DESIGN.md + YouNet brand) */
+
+:root {
+  /* Surface */
+  --color-surface-0: #ffffff;
+  --color-surface-1: #f5f5f5;
+  --color-surface-warm: #f5f2ef;
+  --color-surface-warm-tr: rgba(245, 242, 239, 0.8);
+
+  /* Text */
+  --color-text-primary: #000000;
+  --color-text-secondary: #4e4e4e;
+  --color-text-muted: #777169;
+
+  /* Border */
+  --color-border: #e5e5e5;
+  --color-border-subtle: rgba(0, 0, 0, 0.05);
+
+  /* YouNet accent — single accent per DESIGN.md */
+  --color-accent: #e5001a;
+  --color-accent-hover: #c80017;
+  --color-accent-soft: rgba(229, 0, 26, 0.08);
+
+  /* Semantic */
+  --color-success: #0a7a3a;
+  --color-warning: #b86b00;
+  --color-danger: #b42318;
+  --color-info: #0b5bcc;
+
+  /* Focus */
+  --color-ring: rgb(147 197 253 / 0.5);
+
+  /* Recording / waveform */
+  --color-recording: var(--color-accent);
+  --color-waveform-idle: #777169;
+  --color-waveform-active: var(--color-accent);
+
+  /* Radius */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-card: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-warm-btn: 30px;
+  --radius-pill: 9999px;
+
+  /* Shadows — sub-0.1 opacity per DESIGN.md */
+  --shadow-inset-edge: rgba(0, 0, 0, 0.075) 0px 0px 0px 0.5px inset;
+  --shadow-inset-dark: rgba(0, 0, 0, 0.1) 0px 0px 0px 0.5px inset;
+  --shadow-outline-ring: rgba(0, 0, 0, 0.06) 0px 0px 0px 1px;
+  --shadow-soft-lift: rgba(0, 0, 0, 0.04) 0px 4px 4px;
+  --shadow-card: rgba(0, 0, 0, 0.4) 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 4px 4px;
+  --shadow-warm-lift: rgba(78, 50, 23, 0.04) 0px 6px 16px;
+  --shadow-edge: rgba(0, 0, 0, 0.08) 0px 0px 0px 0.5px;
+
+  /* Typography */
+  --font-display: "Playfair Display", "Garamond", Georgia, serif;
+  --font-body: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Spacing */
+  --space-1: 1px;
+  --space-3: 3px;
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-40: 40px;
+  --space-64: 64px;
+  --space-96: 96px;
+
+  /* Motion */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
+  --duration-fast: 120ms;
+  --duration-med: 240ms;
+  --duration-slow: 360ms;
+
+  /* Z-index */
+  --z-base: 0;
+  --z-raised: 10;
+  --z-sticky: 100;
+  --z-overlay: 1000;
+  --z-modal: 1100;
+  --z-toast: 1200;
+}
+
+/* Typography utility classes */
+.text-display-hero {
+  font-family: var(--font-display);
+  font-size: 3rem; /* 48px */
+  font-weight: 300;
+  line-height: 1.08;
+  letter-spacing: -0.96px;
+}
+.text-display-section {
+  font-family: var(--font-display);
+  font-size: 2.25rem;
+  font-weight: 300;
+  line-height: 1.17;
+}
+.text-display-card {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 300;
+  line-height: 1.13;
+}
+.text-body-lg {
+  font-family: var(--font-body);
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.35;
+}
+.text-body {
+  font-family: var(--font-body);
+  font-size: 1.125rem;
+  font-weight: 400;
+  line-height: 1.6;
+  letter-spacing: 0.18px;
+}
+.text-body-ui {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: 0.16px;
+}
+.text-body-med {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.16px;
+}
+.text-nav {
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.47;
+  letter-spacing: 0.15px;
+}
+.text-button {
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.47;
+}
+.text-caption {
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.43;
+  letter-spacing: 0.14px;
+}
+.text-small {
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.38;
+}
+.text-micro {
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.33;
+}
+.text-code {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.85;
+}

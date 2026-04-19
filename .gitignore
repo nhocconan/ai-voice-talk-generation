@@ -1,0 +1,65 @@
+# Env
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Next.js
+apps/web/.next/
+apps/web/out/
+apps/web/build/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+apps/worker/.venv/
+apps/worker/__pycache__/
+*.egg-info/
+dist/
+coverage/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# uv
+apps/worker/.python-version
+
+# Build artifacts
+*.tsbuildinfo
+.turbo/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker volumes
+infra/volumes/
+
+# Models (large files)
+apps/worker/models/
+
+# Generated types
+packages/contracts/src/generated/
+
+# Logs
+*.log
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+
+# Hosting
+apps/web/.vercel/

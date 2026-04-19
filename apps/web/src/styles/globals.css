@@ -1,0 +1,65 @@
+@import "tailwindcss";
+@import "./tokens.css";
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap");
+
+@theme {
+  --color-surface: var(--color-surface-0);
+  --color-surface-muted: var(--color-surface-1);
+  --color-warm: var(--color-surface-warm);
+  --color-accent: var(--color-accent);
+  --color-accent-hover: var(--color-accent-hover);
+  --color-accent-soft: var(--color-accent-soft);
+  --color-text: var(--color-text-primary);
+  --color-secondary: var(--color-text-secondary);
+  --color-muted: var(--color-text-muted);
+  --color-border: var(--color-border);
+  --color-ring: var(--color-ring);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+  --radius: var(--radius-md);
+  --radius-pill: var(--radius-pill);
+  --radius-card: var(--radius-card);
+  --radius-warm-btn: var(--radius-warm-btn);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--color-surface-0);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+}
+
+/* Focus ring that matches design system */
+:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-surface-1);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-pill);
+}
+
+/* Waveform canvas base */
+.waveform-canvas {
+  width: 100%;
+  height: 64px;
+}

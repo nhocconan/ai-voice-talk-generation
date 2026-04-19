@@ -1,0 +1,210 @@
+// YouNet Voice Studio — Prisma Schema v1
+// See docs/ARCHITECTURE.md for design rationale
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Users & Access
+// ---------------------------------------------------------------------------
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  USER
+}
+
+model User {
+  id                  String    @id @default(cuid())
+  email               String    @unique
+  name                String
+  passwordHash        String
+  role                Role      @default(USER)
+  active              Boolean   @default(true)
+  forcePasswordChange Boolean   @default(false)
+  quotaMinutes        Int       @default(60)
+  usedMinutes         Int       @default(0)
+  lastLoginAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  profiles       VoiceProfile[]
+  generations    Generation[]
+  invitesCreated Invite[]       @relation("InviteCreator")
+  auditLogs      AuditLog[]     @relation("AuditActor")
+
+  @@map("users")
+}
+
+model Invite {
+  id          String    @id @default(cuid())
+  email       String
+  tokenHash   String    @unique
+  role        Role      @default(USER)
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdById String
+  createdBy   User      @relation("InviteCreator", fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now())
+
+  @@index([email])
+  @@map("invites")
+}
+
+// ---------------------------------------------------------------------------
+// Voice profiles & samples
+// ---------------------------------------------------------------------------
+
+model VoiceProfile {
+  id            String   @id @default(cuid())
+  ownerId       String
+  owner         User     @relation(fields: [ownerId], references: [id])
+  name          String
+  lang          String   @default("vi")
+  isOrgShared   Boolean  @default(false)
+  isLocked      Boolean  @default(false)
+  activeVersion Int      @default(1)
+  consent       Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  samples            VoiceSample[]
+  generationSpeakers GenerationSpeaker[]
+
+  @@index([ownerId])
+  @@map("voice_profiles")
+}
+
+model VoiceSample {
+  id            String       @id @default(cuid())
+  profileId     String
+  profile       VoiceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  version       Int
+  storageKey    String
+  durationMs    Int
+  sampleRate    Int          @default(24000)
+  qualityScore  Int
+  qualityDetail Json
+  notes         String?
+  createdAt     DateTime     @default(now())
+
+  @@unique([profileId, version])
+  @@map("voice_samples")
+}
+
+// ---------------------------------------------------------------------------
+// Providers
+// ---------------------------------------------------------------------------
+
+enum ProviderName {
+  XTTS_V2
+  F5_TTS
+  ELEVENLABS
+  GEMINI_TTS
+}
+
+model ProviderConfig {
+  id        String       @id @default(cuid())
+  name      ProviderName @unique
+  apiKeyEnc String?
+  enabled   Boolean      @default(true)
+  isDefault Boolean      @default(false)
+  config    Json         @default("{}")
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  generations Generation[]
+
+  @@map("provider_configs")
+}
+
+// ---------------------------------------------------------------------------
+// Generations
+// ---------------------------------------------------------------------------
+
+enum GenKind {
+  PRESENTATION
+  PODCAST
+  REVOICE
+}
+
+enum GenStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+  CANCELLED
+}
+
+model Generation {
+  id             String     @id @default(cuid())
+  userId         String
+  user           User       @relation(fields: [userId], references: [id])
+  kind           GenKind
+  status         GenStatus  @default(QUEUED)
+  providerId     String
+  provider       ProviderConfig @relation(fields: [providerId], references: [id])
+  inputScript    String?    @db.Text
+  sourceAudioKey String?
+  outputMp3Key   String?
+  outputWavKey   String?
+  durationMs     Int?
+  chapters       Json?
+  costCents      Int?
+  errorMessage   String?
+  createdAt      DateTime   @default(now())
+  startedAt      DateTime?
+  finishedAt     DateTime?
+
+  speakers GenerationSpeaker[]
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("generations")
+}
+
+model GenerationSpeaker {
+  id           String       @id @default(cuid())
+  generationId String
+  generation   Generation   @relation(fields: [generationId], references: [id], onDelete: Cascade)
+  label        String
+  profileId    String
+  profile      VoiceProfile @relation(fields: [profileId], references: [id])
+  segments     Json
+
+  @@map("generation_speakers")
+}
+
+// ---------------------------------------------------------------------------
+// Audit & Settings
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id])
+  action     String
+  targetType String
+  targetId   String?
+  meta       Json     @default("{}")
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+  @@map("audit_logs")
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
