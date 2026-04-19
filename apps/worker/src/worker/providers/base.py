@@ -1,0 +1,39 @@
+"""TTSProvider protocol — all providers implement this interface."""
+from typing import Protocol, runtime_checkable
+from pathlib import Path
+from dataclasses import dataclass
+
+
+@dataclass
+class VoiceRef:
+    """Provider-specific handle returned by prepare_voice."""
+    provider_name: str
+    data: dict  # provider-specific: embedding path, voice_id, etc.
+
+
+AudioBytes = bytes
+
+
+@runtime_checkable
+class TTSProvider(Protocol):
+    name: str
+    supported_languages: list[str]
+    max_chunk_chars: int
+
+    async def prepare_voice(self, samples: list[Path]) -> VoiceRef:
+        """Load reference audio samples and return a reusable voice handle."""
+        ...
+
+    async def synthesize(
+        self,
+        text: str,
+        voice: VoiceRef,
+        lang: str,
+        speed: float = 1.0,
+    ) -> AudioBytes:
+        """Return raw wav/pcm bytes at the provider's native sample rate."""
+        ...
+
+    async def close(self) -> None:
+        """Release any held resources."""
+        ...
