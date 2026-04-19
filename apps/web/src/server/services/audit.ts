@@ -1,12 +1,13 @@
+import type { Prisma } from "@prisma/client"
 import { db } from "@/server/db/client"
 
 interface AuditParams {
-  actorId?: string
+  actorId?: string | undefined
   action: string
   targetType: string
-  targetId?: string
-  meta?: Record<string, unknown>
-  ip?: string
+  targetId?: string | undefined
+  meta?: Prisma.InputJsonValue | undefined
+  ip?: string | undefined
 }
 
 export async function writeAuditLog(params: AuditParams): Promise<void> {

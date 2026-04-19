@@ -1,11 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { trpc } from "@/lib/trpc/client"
 
 interface Props {
   generationId: string
-  onDone: () => void
+  onDone?: () => void
+  onReset?: () => void
 }
 
 interface ProgressEvent {
@@ -15,7 +15,7 @@ interface ProgressEvent {
   message: string
 }
 
-export function GenerationProgress({ generationId, onDone }: Props) {
+export function GenerationProgress({ generationId, onDone, onReset }: Props) {
   const [events, setEvents] = useState<ProgressEvent[]>([])
   const [progress, setProgress] = useState(0)
   const [phase, setPhase] = useState("Queued")
@@ -32,7 +32,10 @@ export function GenerationProgress({ generationId, onDone }: Props) {
 
         if (data.phase === "DONE" || data.phase === "FAILED") {
           es.close()
-          setTimeout(onDone, 1000)
+          const callback = onDone ?? onReset
+          if (callback) {
+            setTimeout(callback, 1000)
+          }
         }
       } catch {
         // ignore
@@ -40,7 +43,7 @@ export function GenerationProgress({ generationId, onDone }: Props) {
     }
 
     return () => es.close()
-  }, [generationId, onDone])
+  }, [generationId, onDone, onReset])
 
   return (
     <div

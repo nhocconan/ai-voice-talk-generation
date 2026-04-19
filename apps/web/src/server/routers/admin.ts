@@ -1,8 +1,8 @@
 import { z } from "zod"
 import { router, adminProcedure, superAdminProcedure } from "@/server/trpc"
-import { Role } from "@prisma/client"
+import { Prisma, Role } from "@prisma/client"
 import { TRPCError } from "@trpc/server"
-import { encryptApiKey, decryptApiKey } from "@/server/services/crypto"
+import { encryptApiKey } from "@/server/services/crypto"
 
 export const adminRouter = router({
   // Users
@@ -35,19 +35,30 @@ export const adminRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input
+      const updateData: {
+        name?: string
+        role?: Role
+        quotaMinutes?: number
+        active?: boolean
+      } = {}
+
+      if (data.name !== undefined) updateData.name = data.name
+      if (data.role !== undefined) updateData.role = data.role
+      if (data.quotaMinutes !== undefined) updateData.quotaMinutes = data.quotaMinutes
+      if (data.active !== undefined) updateData.active = data.active
 
       // Prevent non-super-admin from promoting to SUPER_ADMIN
       if (data.role === Role.SUPER_ADMIN && ctx.session.user.role !== "SUPER_ADMIN") {
         throw new TRPCError({ code: "FORBIDDEN", message: "Only super admins can grant super admin role" })
       }
 
-      const updated = await ctx.db.user.update({ where: { id }, data })
+      const updated = await ctx.db.user.update({ where: { id }, data: updateData })
       await ctx.audit({
         actorId: ctx.session.user.id,
         action: "admin.updateUser",
         targetType: "User",
         targetId: id,
-        meta: data,
+        meta: updateData,
       })
       return updated
     }),
@@ -73,11 +84,14 @@ export const adminRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const { id, apiKey, ...rest } = input
-      const data: Record<string, unknown> = { ...rest }
+      const data: Prisma.ProviderConfigUpdateInput = {}
 
       if (apiKey !== undefined) {
-        data.apiKeyEnc = apiKey ? await encryptApiKey(apiKey) : null
+        data.apiKeyEnc = apiKey ? encryptApiKey(apiKey) : null
       }
+      if (rest.enabled !== undefined) data.enabled = rest.enabled
+      if (rest.isDefault !== undefined) data.isDefault = rest.isDefault
+      if (rest.config !== undefined) data.config = rest.config as Prisma.InputJsonValue
 
       if (rest.isDefault) {
         // Only one can be default
@@ -91,7 +105,7 @@ export const adminRouter = router({
         action: "admin.updateProvider",
         targetType: "ProviderConfig",
         targetId: id,
-        meta: { ...rest, apiKeyChanged: apiKey !== undefined },
+        meta: { ...rest, apiKeyChanged: apiKey !== undefined } as Prisma.InputJsonValue,
       })
     }),
 
@@ -152,15 +166,15 @@ export const adminRouter = router({
     .mutation(async ({ ctx, input }) => {
       await ctx.db.setting.upsert({
         where: { key: input.key },
-        update: { value: input.value },
-        create: { key: input.key, value: input.value },
+        update: { value: input.value as Prisma.InputJsonValue },
+        create: { key: input.key, value: input.value as Prisma.InputJsonValue },
       })
       await ctx.audit({
         actorId: ctx.session.user.id,
         action: "admin.updateSetting",
         targetType: "Setting",
         targetId: input.key,
-        meta: { value: input.value },
+        meta: { value: input.value } as Prisma.InputJsonValue,
       })
     }),
 

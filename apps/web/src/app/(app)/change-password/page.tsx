@@ -11,11 +11,11 @@ export default function ChangePasswordPage() {
   const [error, setError] = useState("");
 
   const mutation = api.user.changePassword.useMutation({
-    onSuccess: () => router.push("/dashboard"),
+    onSuccess: () => router.push("/app/dashboard"),
     onError: (e) => setError(e.message),
   });
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
     if (newPassword !== confirm) {

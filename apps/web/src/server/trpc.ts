@@ -7,7 +7,7 @@ import { writeAuditLog } from "@/server/services/audit"
 
 interface CreateContextOptions {
   session: Session | null
-  ip?: string
+  ip?: string | undefined
 }
 
 export function createTRPCContext(opts: CreateContextOptions) {
@@ -15,6 +15,7 @@ export function createTRPCContext(opts: CreateContextOptions) {
 }
 
 export type Context = ReturnType<typeof createTRPCContext>
+type AuthedContext = Context & { session: Session }
 
 const t = initTRPC.context<Context>().create({
   transformer: superjson,
@@ -38,7 +39,7 @@ const enforceAuth = t.middleware(({ ctx, next }) => {
   if (!ctx.session?.user) {
     throw new TRPCError({ code: "UNAUTHORIZED" })
   }
-  return next({ ctx: { ...ctx, session: ctx.session } })
+  return next({ ctx: { ...ctx, session: ctx.session } satisfies AuthedContext })
 })
 
 // Admin middleware
@@ -48,7 +49,7 @@ const enforceAdmin = t.middleware(({ ctx, next }) => {
   if (role !== "ADMIN" && role !== "SUPER_ADMIN") {
     throw new TRPCError({ code: "FORBIDDEN" })
   }
-  return next({ ctx: { ...ctx, session: ctx.session } })
+  return next({ ctx: { ...ctx, session: ctx.session } satisfies AuthedContext })
 })
 
 // Super admin middleware
@@ -57,7 +58,7 @@ const enforceSuperAdmin = t.middleware(({ ctx, next }) => {
   if (ctx.session.user.role !== "SUPER_ADMIN") {
     throw new TRPCError({ code: "FORBIDDEN" })
   }
-  return next({ ctx: { ...ctx, session: ctx.session } })
+  return next({ ctx: { ...ctx, session: ctx.session } satisfies AuthedContext })
 })
 
 export const protectedProcedure = t.procedure.use(enforceAuth)

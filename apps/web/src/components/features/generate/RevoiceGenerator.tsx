@@ -1,102 +1,109 @@
-"use client";
+"use client"
 
-import { useState, useRef } from "react";
-import { api } from "@/lib/trpc/client";
-import { ProfileSelector } from "./ProfileSelector";
-import { GenerationProgress } from "./GenerationProgress";
-
-interface SpeakerAssignment {
-  label: string;
-  profileId: string;
-}
+import { useMemo, useRef, useState } from "react"
+import { trpc } from "@/lib/trpc/client"
+import { parseTimedScript } from "@/lib/timed-script"
+import { ProfileSelector } from "./ProfileSelector"
+import { GenerationProgress } from "./GenerationProgress"
 
 export function RevoiceGenerator() {
-  const [file, setFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [storageKey, setStorageKey] = useState("");
-  const [lang, setLang] = useState("vi");
-  const [diarize, setDiarize] = useState(true);
-  const [numSpeakers, setNumSpeakers] = useState(2);
-  const [speakers, setSpeakers] = useState<SpeakerAssignment[]>([
-    { label: "SPEAKER_00", profileId: "" },
-    { label: "SPEAKER_01", profileId: "" },
-  ]);
-  const [asrDone, setAsrDone] = useState(false);
-  const [generationId, setGenerationId] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [fileName, setFileName] = useState<string | null>(null)
+  const [storageKey, setStorageKey] = useState("")
+  const [uploading, setUploading] = useState(false)
+  const [profileAId, setProfileAId] = useState("")
+  const [profileBId, setProfileBId] = useState("")
+  const [script, setScript] = useState("")
+  const [parseError, setParseError] = useState<string | null>(null)
+  const [generationId, setGenerationId] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
-  const presignMutation = api.voiceProfile.presignUpload.useMutation();
-  const asrMutation = api.generation.submitAsr.useMutation({
-    onSuccess: () => setAsrDone(true),
-  });
-  const revoiceMutation = api.generation.submitRevoice.useMutation({
+  const uploadMutation = trpc.generation.requestSourceUploadUrl.useMutation()
+  const revoiceMutation = trpc.generation.submitRevoice.useMutation({
     onSuccess: (data) => setGenerationId(data.generationId),
-  });
+  })
 
-  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setFile(f);
-    setUploading(true);
+  const estimatedMinutes = useMemo(() => {
+    if (!script.trim()) return 0.5
 
     try {
-      const { uploadUrl, key } = await presignMutation.mutateAsync({
-        filename: f.name,
-        contentType: f.type || "audio/mpeg",
-        bucket: "source",
-      });
+      const lastEndMs = parseTimedScript(script).at(-1)?.endMs ?? 30_000
+      return Math.max(0.5, Math.min(60, lastEndMs / 60_000))
+    } catch {
+      return 0.5
+    }
+  }, [script])
+
+  async function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    setFileName(file.name)
+
+    try {
+      const { uploadUrl, storageKey: nextStorageKey } = await uploadMutation.mutateAsync({
+        filename: file.name,
+        contentType: file.type || "audio/mpeg",
+        contentLength: file.size,
+      })
 
       await fetch(uploadUrl, {
         method: "PUT",
-        body: f,
-        headers: { "Content-Type": f.type || "audio/mpeg" },
-      });
+        body: file,
+        headers: { "Content-Type": file.type || "audio/mpeg" },
+      })
 
-      setStorageKey(key);
+      setStorageKey(nextStorageKey)
     } finally {
-      setUploading(false);
+      setUploading(false)
     }
   }
 
-  function handleRunAsr() {
-    if (!storageKey) return;
-    asrMutation.mutate({ storageKey, lang, diarize, numSpeakers });
-  }
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
 
-  function updateSpeaker(idx: number, profileId: string) {
-    setSpeakers((prev) =>
-      prev.map((s, i) => (i === idx ? { ...s, profileId } : s))
-    );
-  }
+    try {
+      const segments = parseTimedScript(script)
+      setParseError(null)
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    revoiceMutation.mutate({
-      sourceStorageKey: storageKey,
-      speakerAssignments: speakers,
-      lang,
-    });
+      const speakers = (["A", "B"] as const)
+        .map((label) => ({
+          label,
+          profileId: label === "A" ? profileAId : (profileBId || profileAId),
+          segments: segments
+            .filter((segment) => segment.label === label)
+            .map(({ startMs, endMs, text }) => ({ startMs, endMs, text })),
+        }))
+        .filter((speaker) => speaker.profileId && speaker.segments.length > 0)
+
+      revoiceMutation.mutate({
+        sourceAudioKey: storageKey,
+        estimatedMinutes,
+        speakers,
+      })
+    } catch (error) {
+      setParseError(error instanceof Error ? error.message : "Timed script is invalid")
+    }
   }
 
   if (generationId) {
-    return <GenerationProgress generationId={generationId} onReset={() => setGenerationId(null)} />;
+    return <GenerationProgress generationId={generationId} onReset={() => setGenerationId(null)} />
   }
 
   return (
-    <div className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6">
       <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-5 space-y-4">
         <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">1. Upload Source Audio</h2>
-
         <div
           onClick={() => fileRef.current?.click()}
           className="flex cursor-pointer flex-col items-center rounded-[var(--radius-md)] border-2 border-dashed border-[var(--color-border)] p-8 text-center hover:border-[var(--color-accent)] transition-colors"
         >
-          {file ? (
-            <p className="text-sm text-[var(--color-text-primary)]">{file.name}</p>
+          {fileName ? (
+            <p className="text-sm text-[var(--color-text-primary)]">{fileName}</p>
           ) : (
             <>
               <p className="text-sm text-[var(--color-text-secondary)]">Click to upload MP3 or M4A</p>
-              <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">Max 500MB</p>
+              <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">Max 100MB</p>
             </>
           )}
           {uploading && <p className="mt-2 text-xs text-[var(--color-accent)]">Uploading...</p>}
@@ -110,90 +117,41 @@ export function RevoiceGenerator() {
         />
       </div>
 
-      {storageKey && !asrDone && (
+      <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">2. Transcribe & Diarize</h2>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-[var(--color-text-secondary)]">Language</label>
-              <select
-                value={lang}
-                onChange={(e) => setLang(e.target.value)}
-                className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface-1)] px-2 py-1.5 text-sm focus:outline-none"
-              >
-                <option value="vi">Vietnamese</option>
-                <option value="en">English</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-[var(--color-text-secondary)]">Auto-diarize</label>
-              <input
-                type="checkbox"
-                checked={diarize}
-                onChange={(e) => setDiarize(e.target.checked)}
-                className="h-4 w-4 accent-[var(--color-accent)]"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-[var(--color-text-secondary)]">Num speakers</label>
-              <select
-                value={numSpeakers}
-                onChange={(e) => setNumSpeakers(parseInt(e.target.value))}
-                className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface-1)] px-2 py-1.5 text-sm focus:outline-none"
-              >
-                <option value={1}>1</option>
-                <option value={2}>2</option>
-                <option value={3}>3</option>
-                <option value={4}>4</option>
-              </select>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleRunAsr}
-            disabled={asrMutation.isPending}
-            className="rounded-[var(--radius-warm-btn)] bg-[var(--color-accent)] px-5 py-2 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
-          >
-            {asrMutation.isPending ? "Transcribing..." : "Run Transcription"}
-          </button>
-          {asrMutation.error && (
-            <p className="text-sm text-red-500">{asrMutation.error.message}</p>
-          )}
+          <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">2. Speaker A</h2>
+          <ProfileSelector value={profileAId} onChange={setProfileAId} />
         </div>
-      )}
+        <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-5 space-y-4">
+          <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">3. Speaker B</h2>
+          <ProfileSelector value={profileBId} onChange={setProfileBId} />
+        </div>
+      </div>
 
-      {asrDone && (
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-5 space-y-4">
-            <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">3. Assign Voices to Speakers</h2>
-            {speakers.map((sp, idx) => (
-              <div key={idx} className="flex items-center gap-4">
-                <span className="w-28 text-sm font-mono text-[var(--color-text-secondary)]">{sp.label}</span>
-                <div className="flex-1">
-                  <ProfileSelector
-                    value={sp.profileId}
-                    onChange={(id) => updateSpeaker(idx, id)}
-                    placeholder="Select voice..."
-                    required
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+      <div className="space-y-3">
+        <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">4. Timed Script</h2>
+        <textarea
+          value={script}
+          onChange={(event) => setScript(event.target.value)}
+          rows={10}
+          className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] px-3 py-2 text-sm focus:border-[var(--color-accent)] focus:outline-none"
+          placeholder="[00:00 A] Opening line&#10;[00:06 B] Response"
+        />
+        <p className="text-xs text-[var(--color-text-tertiary)]">
+          Paste the corrected transcript in <code>[MM:SS A] text</code> format before rendering.
+        </p>
+      </div>
 
-          {revoiceMutation.error && (
-            <p className="text-sm text-red-500">{revoiceMutation.error.message}</p>
-          )}
+      {parseError && <p className="text-sm text-red-500">{parseError}</p>}
+      {revoiceMutation.error && <p className="text-sm text-red-500">{revoiceMutation.error.message}</p>}
 
-          <button
-            type="submit"
-            disabled={revoiceMutation.isPending || speakers.some((s) => !s.profileId)}
-            className="rounded-[var(--radius-warm-btn)] bg-[var(--color-accent)] px-6 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
-          >
-            {revoiceMutation.isPending ? "Processing..." : "Re-voice Audio"}
-          </button>
-        </form>
-      )}
-    </div>
-  );
+      <button
+        type="submit"
+        disabled={revoiceMutation.isPending || uploading || !storageKey || !profileAId || !script.trim()}
+        className="rounded-[var(--radius-warm-btn)] bg-[var(--color-accent)] px-6 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
+      >
+        {revoiceMutation.isPending ? "Processing..." : `Re-voice Audio (${estimatedMinutes.toFixed(1)} min)`}
+      </button>
+    </form>
+  )
 }

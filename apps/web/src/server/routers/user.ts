@@ -14,13 +14,19 @@ export const userRouter = router({
 
   changePassword: protectedProcedure
     .input(z.object({
-      currentPassword: z.string().min(1),
+      currentPassword: z.string().min(1).optional(),
       newPassword: z.string().min(8).regex(/^(?=.*[A-Z])(?=.*[0-9])/, "Must contain uppercase and number"),
     }))
     .mutation(async ({ ctx, input }) => {
       const user = await ctx.db.user.findUniqueOrThrow({ where: { id: ctx.session.user.id } })
-      const valid = await bcrypt.compare(input.currentPassword, user.passwordHash)
-      if (!valid) throw new TRPCError({ code: "BAD_REQUEST", message: "Current password incorrect" })
+      if (!user.forcePasswordChange) {
+        if (!input.currentPassword) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Current password required" })
+        }
+
+        const valid = await bcrypt.compare(input.currentPassword, user.passwordHash)
+        if (!valid) throw new TRPCError({ code: "BAD_REQUEST", message: "Current password incorrect" })
+      }
 
       const hash = await bcrypt.hash(input.newPassword, 12)
       await ctx.db.user.update({
@@ -33,7 +39,7 @@ export const userRouter = router({
         action: "user.changePassword",
         targetType: "User",
         targetId: user.id,
-        ip: ctx.ip,
+        ...(ctx.ip ? { ip: ctx.ip } : {}),
       })
     }),
 })

@@ -14,7 +14,7 @@ export interface IngestJobData {
   storageKey: string
   version: number
   userId: string
-  notes?: string
+  notes?: string | undefined
 }
 
 export interface RenderJobData {

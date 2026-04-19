@@ -1,6 +1,6 @@
 "use client";
 
-import { api } from "@/lib/trpc/client";
+import { trpc } from "@/lib/trpc/client";
 
 const STATUS_COLORS: Record<string, string> = {
   QUEUED: "bg-amber-100 text-amber-800",
@@ -23,11 +23,7 @@ function formatMs(ms: number) {
 }
 
 export function GenerationHistoryList() {
-  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    api.generation.list.useInfiniteQuery(
-      { limit: 20 },
-      { getNextPageParam: (last) => last.nextCursor }
-    );
+  const { data, isLoading } = trpc.generation.list.useQuery({ page: 1, pageSize: 50 });
 
   if (isLoading) {
     return (
@@ -37,13 +33,13 @@ export function GenerationHistoryList() {
     );
   }
 
-  const items = data?.pages.flatMap((p) => p.items) ?? [];
+  const items = data?.items ?? [];
 
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border)] py-20 text-center">
         <p className="text-[var(--color-text-secondary)]">No generations yet.</p>
-        <a href="/generate" className="mt-3 text-sm text-[var(--color-accent)] hover:underline">
+        <a href="/app/generate" className="mt-3 text-sm text-[var(--color-accent)] hover:underline">
           Create your first one →
         </a>
       </div>
@@ -88,16 +84,6 @@ export function GenerationHistoryList() {
           </div>
         </div>
       ))}
-
-      {hasNextPage && (
-        <button
-          onClick={() => fetchNextPage()}
-          disabled={isFetchingNextPage}
-          className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] py-2 text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] disabled:opacity-50"
-        >
-          {isFetchingNextPage ? "Loading..." : "Load more"}
-        </button>
-      )}
     </div>
   );
 }

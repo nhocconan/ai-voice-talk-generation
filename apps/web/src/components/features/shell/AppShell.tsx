@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import type { Session } from "next-auth"
 import { signOut } from "next-auth/react"
 import {
-  LayoutDashboardIcon, MicIcon, PlayCircleIcon, HistoryIcon, ShieldIcon,
+  LayoutDashboardIcon, MicIcon, PlayCircleIcon, HistoryIcon,
   UsersIcon, SettingsIcon, LogOutIcon, MenuIcon, XIcon, AudioLinesIcon,
 } from "lucide-react"
 import { useState } from "react"

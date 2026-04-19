@@ -34,7 +34,6 @@ export function EnrollmentWizard() {
   const [step, setStep] = useState<Step>("info")
   const [mode, setMode] = useState<Mode>("guided")
   const [profileId, setProfileId] = useState<string | null>(null)
-  const [pendingSamples, setPendingSamples] = useState<Array<{ key: string; blob: Blob }>>([])
 
   const createProfile = trpc.voiceProfile.create.useMutation()
 

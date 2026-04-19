@@ -20,8 +20,17 @@ export function UserManager() {
   const [search, setSearch] = useState("")
 
   const { data, refetch } = trpc.admin.listUsers.useQuery({ search: search || undefined })
-  const updateUser = trpc.admin.updateUser.useMutation({ onSuccess: () => refetch() })
-  const createInvite = trpc.invite.create.useMutation({ onSuccess: () => { setShowInvite(false); refetch() } })
+  const updateUser = trpc.admin.updateUser.useMutation({
+    onSuccess: () => {
+      void refetch()
+    },
+  })
+  const createInvite = trpc.invite.create.useMutation({
+    onSuccess: () => {
+      setShowInvite(false)
+      void refetch()
+    },
+  })
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<InviteForm>({
     resolver: zodResolver(inviteSchema),
