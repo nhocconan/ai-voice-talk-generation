@@ -16,7 +16,7 @@
     "db:generate": "pnpm --filter web prisma generate",
     "db:migrate": "pnpm --filter web prisma migrate deploy",
     "db:migrate:dev": "pnpm --filter web prisma migrate dev",
-    "db:seed": "pnpm --filter web tsx prisma/seed.ts",
+    "db:seed": "pnpm --filter @yng-voice/web exec tsx prisma/seed.ts",
     "db:studio": "pnpm --filter web prisma studio",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
