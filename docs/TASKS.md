@@ -15,13 +15,13 @@ Goal: repo exists, tooling works, one-command local bring-up. Must finish before
 - [x] **P0-01** Init monorepo (pnpm workspaces, TS config, ESLint flat, Prettier, ruff, mypy, editorconfig). · verified 2026-04-19 · direct main commit https://github.com/nhocconan/ai-voice-talk-generation/commit/873d8a5
   - AC: `pnpm install && pnpm verify` succeeds on a clean clone. Empty `apps/web`, `apps/worker`, `packages/*` scaffolded. CI skeleton (`lint-types`) passes.
   - DoD: Universal, E (Infra).
-- [ ] **P0-02** Docker Compose infra (`postgres`, `redis`, `minio`, `caddy`).
+- [x] **P0-02** Docker Compose infra (`postgres`, `redis`, `minio`, `caddy`). · verified 2026-04-19 · direct main commit https://github.com/nhocconan/ai-voice-talk-generation/commit/ecbde8c
   - AC: `docker compose up -d` brings all services up healthy. MinIO bucket `voice-studio` auto-created via init job.
   - DoD: Universal, E.
-- [ ] **P0-03** `.env.example` + secrets loader + `SERVER_SECRET` generator script.
+- [x] **P0-03** `.env.example` + secrets loader + `SERVER_SECRET` generator script. · verified 2026-04-19 · direct main commit https://github.com/nhocconan/ai-voice-talk-generation/commit/ecbde8c
   - AC: `infra/scripts/gen-secrets.sh` produces all required secrets. README documents env setup in < 1 minute.
   - DoD: Universal, E.
-- [ ] **P0-04** Prisma schema v1 (User, Invite, VoiceProfile, VoiceSample, ProviderConfig, Generation, GenerationSpeaker, AuditLog, Setting) + initial migration + seed script (super admin + default settings).
+- [x] **P0-04** Prisma schema v1 (User, Invite, VoiceProfile, VoiceSample, ProviderConfig, Generation, GenerationSpeaker, AuditLog, Setting) + initial migration + seed script (super admin + default settings). · verified 2026-04-19 · direct main commit https://github.com/nhocconan/ai-voice-talk-generation/commit/ecbde8c
   - AC: `pnpm db:migrate && pnpm db:seed` creates SUPER_ADMIN `admin@younetgroup.com / YouNet@2026` with `forcePasswordChange=true`. Default provider seeded as XTTS_V2.
   - DoD: Universal, A (Backend).
 - [ ] **P0-05** Python worker scaffold (`uv`, FastAPI, structlog, pydantic Settings, health endpoint, Redis Streams consumer skeleton).
