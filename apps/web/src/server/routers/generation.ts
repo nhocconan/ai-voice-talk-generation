@@ -7,7 +7,7 @@ import { db } from "@/server/db/client"
 import { GenKind, GenStatus } from "@prisma/client"
 import crypto from "crypto"
 
-const MAX_GENERATION_MINUTES = 60
+const INPUT_GENERATION_MINUTES_CAP = 12 * 60
 const ALLOWED_SOURCE_MIMES = ["audio/mpeg", "audio/mp4", "audio/x-m4a"]
 
 const segmentSchema = z.object({
@@ -67,11 +67,12 @@ export const generationRouter = router({
     .input(z.object({
       profileId: z.string(),
       script: z.string().min(10),
-      estimatedMinutes: z.number().min(0.1).max(MAX_GENERATION_MINUTES),
+      estimatedMinutes: z.number().min(0.1).max(INPUT_GENERATION_MINUTES_CAP),
       providerId: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await enforceQuota(ctx, input.estimatedMinutes)
+      await enforceGenerationLimit(ctx.db, input.estimatedMinutes)
       await assertProfilesReady(ctx.db, [input.profileId])
 
       const providerId = await resolveProvider(ctx, input.providerId)
@@ -110,12 +111,13 @@ export const generationRouter = router({
   createPodcast: protectedProcedure
     .input(z.object({
       speakers: z.array(speakerSchema).min(1).max(2),
-      estimatedMinutes: z.number().min(0.1).max(MAX_GENERATION_MINUTES),
+      estimatedMinutes: z.number().min(0.1).max(INPUT_GENERATION_MINUTES_CAP),
       pacingLock: z.boolean().default(false),
       providerId: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await enforceQuota(ctx, input.estimatedMinutes)
+      await enforceGenerationLimit(ctx.db, input.estimatedMinutes)
       await assertProfilesReady(ctx.db, input.speakers.map((speaker) => speaker.profileId))
       const providerId = await resolveProvider(ctx, input.providerId)
 
@@ -175,12 +177,13 @@ export const generationRouter = router({
     .input(z.object({
       sourceAudioKey: z.string(),
       speakers: z.array(speakerSchema).min(1).max(2),
-      estimatedMinutes: z.number().min(0.1).max(MAX_GENERATION_MINUTES),
+      estimatedMinutes: z.number().min(0.1).max(INPUT_GENERATION_MINUTES_CAP),
       pacingLock: z.boolean().default(false),
       providerId: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await enforceQuota(ctx, input.estimatedMinutes)
+      await enforceGenerationLimit(ctx.db, input.estimatedMinutes)
       await assertProfilesReady(ctx.db, input.speakers.map((speaker) => speaker.profileId))
       const providerId = await resolveProvider(ctx, input.providerId)
 
@@ -235,6 +238,15 @@ export const generationRouter = router({
         expectedSpeakers: input.expectedSpeakers,
       })
 
+      await ctx.audit({
+        actorId: ctx.session.user.id,
+        action: "generation.submitAsr",
+        targetType: "Generation",
+        targetId: generation.id,
+        meta: { expectedSpeakers: input.expectedSpeakers },
+        ip: ctx.ip,
+      })
+
       return { generationId: generation.id }
     }),
 
@@ -261,6 +273,13 @@ export const generationRouter = router({
       if (gen.status !== GenStatus.QUEUED) throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot cancel" })
 
       await ctx.db.generation.update({ where: { id: input.id }, data: { status: GenStatus.CANCELLED } })
+      await ctx.audit({
+        actorId: ctx.session.user.id,
+        action: "generation.cancel",
+        targetType: "Generation",
+        targetId: input.id,
+        ip: ctx.ip,
+      })
     }),
 
   // Admin delete
@@ -282,6 +301,24 @@ async function enforceQuota(
   })
   if (user.usedMinutes + estimatedMinutes > user.quotaMinutes) {
     throw new TRPCError({ code: "FORBIDDEN", message: `Monthly quota exceeded (${user.usedMinutes}/${user.quotaMinutes} min used)` })
+  }
+}
+
+async function enforceGenerationLimit(
+  prisma: typeof db,
+  estimatedMinutes: number,
+): Promise<void> {
+  const setting = await prisma.setting.findUnique({
+    where: { key: "generation.maxMinutes" },
+    select: { value: true },
+  })
+  const maxMinutes = typeof setting?.value === "number" ? setting.value : 60
+
+  if (estimatedMinutes > maxMinutes) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `Generation length exceeds the configured limit of ${maxMinutes} minutes`,
+    })
   }
 }
 
