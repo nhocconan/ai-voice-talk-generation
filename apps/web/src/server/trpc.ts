@@ -8,10 +8,11 @@ import { writeAuditLog } from "@/server/services/audit"
 interface CreateContextOptions {
   session: Session | null
   ip?: string | undefined
+  userAgent?: string | undefined
 }
 
 export function createTRPCContext(opts: CreateContextOptions) {
-  return { db, session: opts.session, ip: opts.ip, audit: writeAuditLog }
+  return { db, session: opts.session, ip: opts.ip, userAgent: opts.userAgent, audit: writeAuditLog }
 }
 
 export type Context = ReturnType<typeof createTRPCContext>

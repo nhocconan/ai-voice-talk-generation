@@ -16,7 +16,7 @@ export function VoiceProfileList() {
       {profiles.map((profile) => {
         const latestSample = profile.samples.sort((a, b) => b.version - a.version)[0]
         return (
-          <Link key={profile.id} href={`/app/voices/${profile.id}`}>
+          <Link key={profile.id} href={`/voices/${profile.id}`}>
             <div
               className="bg-[var(--color-surface-0)] rounded-[var(--radius-card)] p-5 hover:bg-[var(--color-surface-1)] transition-colors h-full"
               style={{ boxShadow: "var(--shadow-outline-ring), var(--shadow-soft-lift)" }}
@@ -73,7 +73,7 @@ function EmptyState() {
       <MicIcon size={32} className="mx-auto text-[var(--color-text-muted)] mb-4" />
       <h3 className="text-body-med">No voice profiles yet</h3>
       <p className="text-caption text-[var(--color-text-muted)] mt-1">Create one to start generating audio.</p>
-      <Link href="/app/voices/new" className="mt-4 inline-flex items-center gap-2 h-9 px-4 rounded-[var(--radius-pill)] bg-black text-white text-button hover:opacity-90 transition-opacity">
+      <Link href="/voices/new" className="mt-4 inline-flex items-center gap-2 h-9 px-4 rounded-[var(--radius-pill)] bg-black text-white text-button hover:opacity-90 transition-opacity">
         + New Profile
       </Link>
     </div>

@@ -14,6 +14,7 @@ const handler = async (req: NextRequest) => {
       createTRPCContext({
         session,
         ip: req.headers.get("x-forwarded-for") ?? undefined,
+        userAgent: req.headers.get("user-agent") ?? undefined,
       }),
     onError: ({ path, error }) => {
       if (error.code === "INTERNAL_SERVER_ERROR") {

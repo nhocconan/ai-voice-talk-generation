@@ -25,7 +25,7 @@ export function ProfileSelector({ selected, onSelect, value, onChange, exclude =
   if (!available.length) {
     return (
       <p className="text-caption text-[var(--color-danger)]">
-        No voice profiles available. <a href="/app/voices/new" className="underline">Create one first.</a>
+        No voice profiles available. <a href="/voices/new" className="underline">Create one first.</a>
       </p>
     )
   }

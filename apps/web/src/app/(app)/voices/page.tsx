@@ -16,7 +16,7 @@ export default function VoicesPage() {
           </p>
         </div>
         <Link
-          href="/app/voices/new"
+          href="/voices/new"
           className="flex items-center gap-2 h-9 px-4 rounded-[var(--radius-pill)] bg-black text-white text-button hover:opacity-90 transition-opacity"
         >
           <PlusIcon size={15} />

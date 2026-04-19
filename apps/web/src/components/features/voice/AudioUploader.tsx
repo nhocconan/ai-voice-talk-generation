@@ -29,12 +29,28 @@ export function AudioUploader({ profileId, onComplete }: Props) {
   const submitSample = trpc.voiceProfile.submitSample.useMutation()
 
   const addFiles = useCallback((incoming: File[]) => {
-    const valid = incoming.filter((f) => {
-      if (!ALLOWED_TYPES.includes(f.type)) return false
-      if (f.size > MAX_SIZE) return false
-      return true
+    const nextEntries = incoming.map((file) => {
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        return {
+          file,
+          status: "error" as const,
+          progress: 0,
+          error: "Unsupported file type. Use mp3, m4a, wav, flac, or ogg.",
+        }
+      }
+      if (file.size > MAX_SIZE) {
+        return {
+          file,
+          status: "error" as const,
+          progress: 0,
+          error: "File is larger than 100 MB.",
+        }
+      }
+
+      return { file, status: "pending" as const, progress: 0 }
     })
-    setFiles((prev) => [...prev, ...valid.map((f) => ({ file: f, status: "pending" as const, progress: 0 }))])
+
+    setFiles((prev) => [...prev, ...nextEntries])
   }, [])
 
   const onDrop = (e: React.DragEvent) => {
@@ -52,7 +68,7 @@ export function AudioUploader({ profileId, onComplete }: Props) {
     let doneCount = 0
 
     for (const entry of pending) {
-      setFiles((prev) => prev.map((f) => f === entry ? { ...f, status: "uploading" } : f))
+      setFiles((prev) => prev.map((f) => f === entry ? { ...f, status: "uploading", progress: 0 } : f))
 
       try {
         const { uploadUrl, storageKey } = await requestUploadUrl.mutateAsync({
@@ -62,13 +78,15 @@ export function AudioUploader({ profileId, onComplete }: Props) {
           contentLength: entry.file.size,
         })
 
-        await fetch(uploadUrl, { method: "PUT", body: entry.file, headers: { "Content-Type": entry.file.type } })
+        await uploadFileWithProgress(uploadUrl, entry.file, (progress) => {
+          setFiles((prev) => prev.map((f) => f === entry ? { ...f, progress } : f))
+        })
         await submitSample.mutateAsync({ profileId, storageKey, notes: entry.file.name })
 
         setFiles((prev) => prev.map((f) => f === entry ? { ...f, status: "done", progress: 100 } : f))
         doneCount++
       } catch {
-        setFiles((prev) => prev.map((f) => f === entry ? { ...f, status: "error", error: "Upload failed" } : f))
+        setFiles((prev) => prev.map((f) => f === entry ? { ...f, status: "error", error: "Upload failed. Please retry.", progress: 0 } : f))
       }
     }
 
@@ -114,7 +132,8 @@ export function AudioUploader({ profileId, onComplete }: Props) {
               </div>
               {entry.status === "done" && <CheckCircleIcon size={16} style={{ color: "var(--color-success)" }} />}
               {entry.status === "error" && <XCircleIcon size={16} style={{ color: "var(--color-danger)" }} />}
-              {entry.status === "uploading" && <span className="text-micro text-[var(--color-text-muted)] animate-pulse">Uploading…</span>}
+              {entry.status === "uploading" && <span className="text-micro text-[var(--color-text-muted)] animate-pulse">{entry.progress}%</span>}
+              {entry.error && <span className="text-micro text-[var(--color-danger)]">{entry.error}</span>}
             </div>
           ))}
         </div>
@@ -130,4 +149,33 @@ export function AudioUploader({ profileId, onComplete }: Props) {
       )}
     </div>
   )
+}
+
+function uploadFileWithProgress(
+  url: string,
+  file: File,
+  onProgress: (progress: number) => void,
+) {
+  return new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return
+      onProgress(Math.round((event.loaded / event.total) * 100))
+    }
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve()
+        return
+      }
+
+      reject(new Error(`Upload failed with status ${xhr.status}`))
+    }
+
+    xhr.onerror = () => reject(new Error("Network error"))
+    xhr.open("PUT", url)
+    xhr.setRequestHeader("Content-Type", file.type)
+    xhr.send(file)
+  })
 }

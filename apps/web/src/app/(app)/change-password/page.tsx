@@ -11,7 +11,7 @@ export default function ChangePasswordPage() {
   const [error, setError] = useState("");
 
   const mutation = api.user.changePassword.useMutation({
-    onSuccess: () => router.push("/app/dashboard"),
+    onSuccess: () => router.push("/dashboard"),
     onError: (e) => setError(e.message),
   });
 

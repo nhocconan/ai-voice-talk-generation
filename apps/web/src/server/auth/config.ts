@@ -50,12 +50,27 @@ export const authConfig: NextAuthConfig = {
     }),
   ],
   callbacks: {
-    jwt({ token, user }) {
+    async jwt({ token, user }) {
       if (user) {
         token["id"] = user.id
         token["role"] = user.role
         token["forcePasswordChange"] = user.forcePasswordChange
       }
+
+      if (typeof token["id"] === "string") {
+        const currentUser = await db.user.findUnique({
+          where: { id: token["id"] },
+          select: { email: true, name: true, role: true, forcePasswordChange: true },
+        })
+
+        if (currentUser) {
+          token.email = currentUser.email
+          token.name = currentUser.name
+          token["role"] = currentUser.role
+          token["forcePasswordChange"] = currentUser.forcePasswordChange
+        }
+      }
+
       return token
     },
     session({ session, token }) {
@@ -68,7 +83,13 @@ export const authConfig: NextAuthConfig = {
     },
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user
-      const isAppPath = nextUrl.pathname.startsWith("/app")
+      const isAppPath = [
+        "/dashboard",
+        "/voices",
+        "/generate",
+        "/history",
+        "/change-password",
+      ].some((prefix) => nextUrl.pathname === prefix || nextUrl.pathname.startsWith(`${prefix}/`))
       const isAdminPath = nextUrl.pathname.startsWith("/admin")
       const isLoginPage = nextUrl.pathname === "/login"
       const isApiAuth = nextUrl.pathname.startsWith("/api/auth")
@@ -80,13 +101,13 @@ export const authConfig: NextAuthConfig = {
       }
 
       if (isLoggedIn && isLoginPage) {
-        return Response.redirect(new URL("/app", nextUrl))
+        return Response.redirect(new URL("/dashboard", nextUrl))
       }
 
       if (isLoggedIn && auth.user?.forcePasswordChange) {
-        const isChangePwPage = nextUrl.pathname === "/app/change-password"
+        const isChangePwPage = nextUrl.pathname === "/change-password"
         if (!isChangePwPage && isAppPath) {
-          return Response.redirect(new URL("/app/change-password", nextUrl))
+          return Response.redirect(new URL("/change-password", nextUrl))
         }
       }
 
