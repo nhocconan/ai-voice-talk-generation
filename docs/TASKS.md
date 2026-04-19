@@ -24,7 +24,7 @@ Goal: repo exists, tooling works, one-command local bring-up. Must finish before
 - [x] **P0-04** Prisma schema v1 (User, Invite, VoiceProfile, VoiceSample, ProviderConfig, Generation, GenerationSpeaker, AuditLog, Setting) + initial migration + seed script (super admin + default settings). · verified 2026-04-19 · direct main commit https://github.com/nhocconan/ai-voice-talk-generation/commit/ecbde8c
   - AC: `pnpm db:migrate && pnpm db:seed` creates SUPER_ADMIN `admin@younetgroup.com / YouNet@2026` with `forcePasswordChange=true`. Default provider seeded as XTTS_V2.
   - DoD: Universal, A (Backend).
-- [x] **P0-05** Python worker scaffold (`uv`, FastAPI, structlog, pydantic Settings, health endpoint, Redis Streams consumer skeleton). · verified 2026-04-19 · direct main commit TBD
+- [x] **P0-05** Python worker scaffold (`uv`, FastAPI, structlog, pydantic Settings, health endpoint, Redis Streams consumer skeleton). · verified 2026-04-19 · direct main commit https://github.com/nhocconan/ai-voice-talk-generation/commit/487561c
   - AC: `uv run -m worker.main` starts, logs device, consumes from a fake stream without crashing. `/healthz` green.
   - DoD: Universal, C (Worker).
 - [ ] **P0-06** Shared contracts package (`packages/contracts` — pydantic source of truth, TS types generated).
