@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { auth } from "@/server/auth"
 import { db } from "@/server/db/client"
 
@@ -11,6 +11,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   })
   if (!user?.active) redirect("/login")
   const role = session.user.role as string
-  if (role !== "ADMIN" && role !== "SUPER_ADMIN") redirect("/app/dashboard")
+  if (role !== "ADMIN" && role !== "SUPER_ADMIN") notFound()
   return <>{children}</>
 }
