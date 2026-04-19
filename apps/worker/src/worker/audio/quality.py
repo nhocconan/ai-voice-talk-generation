@@ -1,8 +1,9 @@
 """Voice sample quality scoring."""
+from dataclasses import dataclass
+from pathlib import Path
+
 import numpy as np
 import soundfile as sf
-from pathlib import Path
-from dataclasses import dataclass
 
 
 @dataclass
@@ -15,7 +16,7 @@ class QualityDetail:
 
 
 def score_sample(wav_path: Path) -> tuple[int, QualityDetail]:
-    """Compute 0–100 quality score for a normalized 24kHz mono WAV."""
+    """Compute 0-100 quality score for a normalized 24kHz mono WAV."""
     audio, sr = sf.read(str(wav_path))
     if audio.ndim > 1:
         audio = audio[:, 0]
@@ -50,7 +51,10 @@ def _estimate_noise_floor(audio: np.ndarray, sr: int) -> float:
     frame_size = sr // 10
     if len(audio) < frame_size:
         return float(20 * np.log10(np.sqrt(np.mean(audio**2)) + 1e-10))
-    rms = [np.sqrt(np.mean(audio[i:i + frame_size]**2)) for i in range(0, len(audio) - frame_size, frame_size)]
+    rms = [
+        np.sqrt(np.mean(audio[i : i + frame_size] ** 2))
+        for i in range(0, len(audio) - frame_size, frame_size)
+    ]
     rms_sorted = sorted(rms)
     noise_rms = np.mean(rms_sorted[:max(1, len(rms_sorted) // 10)])
     return float(20 * np.log10(noise_rms + 1e-10))

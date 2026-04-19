@@ -1,15 +1,16 @@
 """Voice sample ingest pipeline: download → normalize → VAD → score → store."""
+
 from __future__ import annotations
 
 import asyncio
 import tempfile
-from pathlib import Path
 from dataclasses import asdict
+from pathlib import Path
 
 from ..audio.io import normalize_audio
 from ..audio.quality import score_sample
-from ..services.storage import download_object, upload_object
 from ..logging import get_logger
+from ..services.storage import download_object, upload_object
 
 logger = get_logger("pipeline.ingest")
 
@@ -82,6 +83,7 @@ def _vad_trim(src: Path, dest: Path) -> None:
 
     if not timestamps:
         import shutil
+
         shutil.copy(src, dest)
         return
 

@@ -96,7 +96,7 @@ export const generationRouter = router({
         generationId: generation.id,
         providerId,
         kind: "PRESENTATION",
-        speakers: [{ label: "A", profileId: input.profileId, segments: [] }],
+        speakers: [{ label: "A", profileId: input.profileId, segments: [], script: input.script }],
         output: { mp3: true, wav: true, chapters: false },
         pacingLock: false,
       })

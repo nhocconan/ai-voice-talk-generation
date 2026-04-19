@@ -1,13 +1,14 @@
 """XTTS-v2 provider — runs locally on MPS / CUDA / CPU."""
+
 from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
-from .base import VoiceRef, AudioBytes
 from ..config import settings
 from ..logging import get_logger
+from .base import AudioBytes, VoiceRef
 
 logger = get_logger("provider.xtts")
 
@@ -16,7 +17,7 @@ LANG_MAP = {"vi": "vi", "en": "en", "multi": "en"}  # XTTS uses ISO codes
 
 class XTTSProvider:
     name = "XTTS_V2"
-    supported_languages = ["vi", "en", "zh-cn", "fr", "de", "es", "pt"]
+    supported_languages: ClassVar[list[str]] = ["vi", "en", "zh-cn", "fr", "de", "es", "pt"]
     max_chunk_chars = 250
 
     _tts: Any = None
@@ -32,7 +33,6 @@ class XTTSProvider:
             logger.info("Loading XTTS-v2 model…", device=settings.torch_device)
             # Import here so startup doesn't fail if torch not present
             from TTS.api import TTS  # type: ignore[import]
-            import torch
 
             device = settings.torch_device
             self._tts = await asyncio.to_thread(
@@ -48,11 +48,14 @@ class XTTSProvider:
             data={"speaker_wavs": [str(s) for s in samples]},
         )
 
-    async def synthesize(self, text: str, voice: VoiceRef, lang: str, speed: float = 1.0) -> AudioBytes:
+    async def synthesize(
+        self, text: str, voice: VoiceRef, lang: str, speed: float = 1.0
+    ) -> AudioBytes:
         await self._load_model()
         import io
-        import soundfile as sf
+
         import numpy as np
+        import soundfile as sf
 
         tts_lang = LANG_MAP.get(lang, "en")
         speaker_wavs = voice.data["speaker_wavs"]

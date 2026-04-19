@@ -14,10 +14,15 @@ const inviteSchema = z.object({
   role: z.nativeEnum(Role),
 })
 type InviteForm = z.infer<typeof inviteSchema>
+interface EditableUserState {
+  quotaMinutes: number
+  role: Role
+}
 
 export function UserManager() {
   const [showInvite, setShowInvite] = useState(false)
   const [search, setSearch] = useState("")
+  const [drafts, setDrafts] = useState<Record<string, EditableUserState>>({})
 
   const { data, refetch } = trpc.admin.listUsers.useQuery({ search: search || undefined })
   const updateUser = trpc.admin.updateUser.useMutation({
@@ -40,6 +45,24 @@ export function UserManager() {
   const onInvite = async (data: InviteForm) => {
     await createInvite.mutateAsync(data)
     reset()
+  }
+
+  const updateDraft = (userId: string, patch: Partial<EditableUserState>) => {
+    setDrafts((current) => {
+      const existing = current[userId]
+      const fallback = data?.users.find((user) => user.id === userId)
+
+      if (!existing && !fallback) return current
+
+      return {
+        ...current,
+        [userId]: {
+          role: existing?.role ?? fallback?.role ?? Role.USER,
+          quotaMinutes: existing?.quotaMinutes ?? fallback?.quotaMinutes ?? 0,
+          ...patch,
+        },
+      }
+    })
   }
 
   return (
@@ -105,34 +128,70 @@ export function UserManager() {
             </tr>
           </thead>
           <tbody>
-            {data?.users.map((user) => (
-              <tr key={user.id} style={{ borderBottom: "1px solid var(--color-border-subtle,var(--color-border))" }}>
-                <td className="px-4 py-3">
-                  <div className="text-body-ui">{user.name}</div>
-                  <div className="text-caption text-[var(--color-text-muted)]">{user.email}</div>
-                </td>
-                <td className="px-4 py-3">
-                  <span className="text-small flex items-center gap-1">
-                    {user.role === "SUPER_ADMIN" && <ShieldIcon size={12} />}
-                    {user.role}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-body-ui">{user.usedMinutes}/{user.quotaMinutes} min</td>
-                <td className="px-4 py-3">
-                  <span className={`text-micro ${user.active ? "text-[var(--color-success)]" : "text-[var(--color-danger)]"}`}>
-                    {user.active ? "Active" : "Inactive"}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <button
-                    onClick={() => updateUser.mutate({ id: user.id, active: !user.active })}
-                    className="text-caption text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] underline"
-                  >
-                    {user.active ? "Deactivate" : "Activate"}
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {data?.users.map((user) => {
+              const draft = drafts[user.id] ?? {
+                role: user.role,
+                quotaMinutes: user.quotaMinutes,
+              }
+              const hasChanges = draft.role !== user.role || draft.quotaMinutes !== user.quotaMinutes
+
+              return (
+                <tr key={user.id} style={{ borderBottom: "1px solid var(--color-border-subtle,var(--color-border))" }}>
+                  <td className="px-4 py-3">
+                    <div className="text-body-ui">{user.name}</div>
+                    <div className="text-caption text-[var(--color-text-muted)]">{user.email}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      {user.role === "SUPER_ADMIN" && <ShieldIcon size={12} />}
+                      <select
+                        value={draft.role}
+                        onChange={(event) => updateDraft(user.id, { role: event.target.value as Role })}
+                        className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-2 py-1 text-small"
+                      >
+                        <option value={Role.USER}>USER</option>
+                        <option value={Role.ADMIN}>ADMIN</option>
+                        <option value={Role.SUPER_ADMIN}>SUPER_ADMIN</option>
+                      </select>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        value={draft.quotaMinutes}
+                        onChange={(event) => updateDraft(user.id, { quotaMinutes: Number(event.target.value) })}
+                        className="w-24 rounded-[var(--radius-md)] border border-[var(--color-border)] px-2 py-1 text-body-ui"
+                      />
+                      <span className="text-caption text-[var(--color-text-muted)]">used {user.usedMinutes}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`text-micro ${user.active ? "text-[var(--color-success)]" : "text-[var(--color-danger)]"}`}>
+                      {user.active ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-3">
+                      <button
+                        onClick={() => updateUser.mutate({ id: user.id, active: !user.active })}
+                        className="text-caption text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] underline"
+                      >
+                        {user.active ? "Deactivate" : "Activate"}
+                      </button>
+                      <button
+                        onClick={() => updateUser.mutate({ id: user.id, role: draft.role, quotaMinutes: draft.quotaMinutes })}
+                        disabled={!hasChanges || updateUser.isPending}
+                        className="text-caption text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] underline disabled:opacity-40"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

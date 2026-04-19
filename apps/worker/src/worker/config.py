@@ -1,6 +1,6 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
 import torch
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -32,7 +32,9 @@ class Settings(BaseSettings):
     def validate_device(cls, v: str) -> str:
         if v == "cuda" and not torch.cuda.is_available():
             raise ValueError("CUDA requested but not available — set TORCH_DEVICE=cpu or mps")
-        if v == "mps" and not (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()):
+        if v == "mps" and not (
+            hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+        ):
             return "cpu"
         return v
 

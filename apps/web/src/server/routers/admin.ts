@@ -4,6 +4,31 @@ import { Prisma, Role } from "@prisma/client"
 import { TRPCError } from "@trpc/server"
 import { encryptApiKey } from "@/server/services/crypto"
 
+const settingValueSchema = z.union([
+  z.number().int().min(1),
+  z.number().int().min(0),
+  z.string().regex(/^#[0-9A-F]{6}$/),
+])
+
+function validateSettingInput(key: string, value: unknown) {
+  switch (key) {
+    case "retention.renderDays": {
+      return z.number().int().min(1).parse(value)
+    }
+    case "quota.defaultMinutes": {
+      return z.number().int().min(0).parse(value)
+    }
+    case "generation.maxMinutes": {
+      return z.number().int().min(1).parse(value)
+    }
+    case "branding.accentHex": {
+      return z.string().regex(/^#[0-9A-F]{6}$/).parse(String(value).toUpperCase())
+    }
+    default:
+      throw new TRPCError({ code: "BAD_REQUEST", message: `Unsupported setting key: ${key}` })
+  }
+}
+
 export const adminRouter = router({
   // Users
   listUsers: adminProcedure
@@ -68,9 +93,11 @@ export const adminRouter = router({
     const providers = await ctx.db.providerConfig.findMany({ orderBy: { name: "asc" } })
     return providers.map((p) => ({
       ...p,
-      // Never expose full API key
       apiKeyEnc: p.apiKeyEnc ? "encrypted" : null,
-      apiKeyPreview: p.apiKeyEnc ? `••••${p.apiKeyEnc.slice(-4)}` : null,
+      apiKeyLast4:
+        p.apiKeyEnc && p.config && typeof p.config === "object" && !Array.isArray(p.config)
+          ? (p.config as Record<string, unknown>)["apiKeyLast4"] ?? null
+          : null,
     }))
   }),
 
@@ -85,13 +112,33 @@ export const adminRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { id, apiKey, ...rest } = input
       const data: Prisma.ProviderConfigUpdateInput = {}
+      const existing = await ctx.db.providerConfig.findUnique({
+        where: { id },
+        select: { config: true },
+      })
+      const currentConfig =
+        existing?.config && typeof existing.config === "object" && !Array.isArray(existing.config)
+          ? { ...(existing.config as Record<string, unknown>) }
+          : {}
 
       if (apiKey !== undefined) {
-        data.apiKeyEnc = apiKey ? encryptApiKey(apiKey) : null
+        data.apiKeyEnc = apiKey ? await encryptApiKey(apiKey) : null
+        if (apiKey) {
+          currentConfig["apiKeyLast4"] = apiKey.slice(-4)
+        } else {
+          delete currentConfig["apiKeyLast4"]
+        }
       }
       if (rest.enabled !== undefined) data.enabled = rest.enabled
       if (rest.isDefault !== undefined) data.isDefault = rest.isDefault
-      if (rest.config !== undefined) data.config = rest.config as Prisma.InputJsonValue
+      if (rest.config !== undefined) {
+        data.config = {
+          ...currentConfig,
+          ...rest.config,
+        } as Prisma.InputJsonValue
+      } else if (apiKey !== undefined) {
+        data.config = currentConfig as Prisma.InputJsonValue
+      }
 
       if (rest.isDefault) {
         // Only one can be default
@@ -114,6 +161,7 @@ export const adminRouter = router({
     .input(z.object({
       page: z.number().default(1),
       pageSize: z.number().max(100).default(50),
+      actor: z.string().optional(),
       actorId: z.string().optional(),
       action: z.string().optional(),
       from: z.date().optional(),
@@ -121,8 +169,18 @@ export const adminRouter = router({
     }))
     .query(async ({ ctx, input }) => {
       const where = {
+        ...(input.actor && {
+          actor: {
+            is: {
+              OR: [
+                { email: { contains: input.actor, mode: "insensitive" as const } },
+                { name: { contains: input.actor, mode: "insensitive" as const } },
+              ],
+            },
+          },
+        }),
         ...(input.actorId && { actorId: input.actorId }),
-        ...(input.action && { action: { contains: input.action } }),
+        ...(input.action && { action: { contains: input.action, mode: "insensitive" as const } }),
         ...((input.from ?? input.to) && {
           createdAt: {
             ...(input.from && { gte: input.from }),
@@ -162,19 +220,20 @@ export const adminRouter = router({
   }),
 
   updateSetting: superAdminProcedure
-    .input(z.object({ key: z.string(), value: z.unknown() }))
+    .input(z.object({ key: z.string(), value: settingValueSchema.or(z.string()) }))
     .mutation(async ({ ctx, input }) => {
+      const validatedValue = validateSettingInput(input.key, input.value)
       await ctx.db.setting.upsert({
         where: { key: input.key },
-        update: { value: input.value as Prisma.InputJsonValue },
-        create: { key: input.key, value: input.value as Prisma.InputJsonValue },
+        update: { value: validatedValue as Prisma.InputJsonValue },
+        create: { key: input.key, value: validatedValue as Prisma.InputJsonValue },
       })
       await ctx.audit({
         actorId: ctx.session.user.id,
         action: "admin.updateSetting",
         targetType: "Setting",
         targetId: input.key,
-        meta: { value: input.value } as Prisma.InputJsonValue,
+        meta: { value: validatedValue } as Prisma.InputJsonValue,
       })
     }),
 

@@ -1,21 +1,33 @@
 """Gemini TTS provider via google-generativeai."""
+
 from __future__ import annotations
 
 from pathlib import Path
-import httpx
-import json
+from typing import ClassVar
 
-from .base import VoiceRef, AudioBytes
+import httpx
+
 from ..config import settings
 from ..logging import get_logger
 from ..services.crypto import decrypt_api_key
+from .base import AudioBytes, VoiceRef
 
 logger = get_logger("provider.gemini_tts")
 
 
 class GeminiTTSProvider:
     name = "GEMINI_TTS"
-    supported_languages = ["vi", "en", "zh", "fr", "de", "es", "pt", "ja", "ko"]
+    supported_languages: ClassVar[list[str]] = [
+        "vi",
+        "en",
+        "zh",
+        "fr",
+        "de",
+        "es",
+        "pt",
+        "ja",
+        "ko",
+    ]
     max_chunk_chars = 5000
 
     def __init__(self, api_key_enc: str | None = None) -> None:
@@ -26,9 +38,13 @@ class GeminiTTSProvider:
     async def prepare_voice(self, samples: list[Path]) -> VoiceRef:
         # Gemini TTS doesn't support custom voice cloning via standard API
         # Use a predefined voice mapped to the sample language
-        return VoiceRef(provider_name=self.name, data={"voice_name": "Aoede", "sample_path": str(samples[0])})
+        return VoiceRef(
+            provider_name=self.name, data={"voice_name": "Aoede", "sample_path": str(samples[0])}
+        )
 
-    async def synthesize(self, text: str, voice: VoiceRef, lang: str, speed: float = 1.0) -> AudioBytes:
+    async def synthesize(
+        self, text: str, voice: VoiceRef, lang: str, speed: float = 1.0
+    ) -> AudioBytes:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{self._model}:generateContent?key={self._api_key}"
 
         payload = {
@@ -36,7 +52,9 @@ class GeminiTTSProvider:
             "generationConfig": {
                 "responseModalities": ["AUDIO"],
                 "speechConfig": {
-                    "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice.data.get("voice_name", "Aoede")}}
+                    "voiceConfig": {
+                        "prebuiltVoiceConfig": {"voiceName": voice.data.get("voice_name", "Aoede")}
+                    }
                 },
             },
         }
@@ -48,6 +66,7 @@ class GeminiTTSProvider:
 
         # Extract base64 audio
         import base64
+
         audio_b64 = data["candidates"][0]["content"]["parts"][0]["inlineData"]["data"]
         return base64.b64decode(audio_b64)
 

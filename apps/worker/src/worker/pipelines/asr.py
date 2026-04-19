@@ -3,13 +3,12 @@ from __future__ import annotations
 
 import asyncio
 import tempfile
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 
-from ..audio.io import get_duration_ms
-from ..services.storage import download_object
-from ..logging import get_logger
 from ..config import settings
+from ..logging import get_logger
+from ..services.storage import download_object
 
 logger = get_logger("pipeline.asr")
 
@@ -74,8 +73,8 @@ def _transcribe(audio_path: Path) -> list[dict]:
 
 
 def _diarize(audio_path: Path, num_speakers: int, whisper_segments: list[dict]) -> list[Segment]:
-    from pyannote.audio import Pipeline  # type: ignore[import]
     import torch
+    from pyannote.audio import Pipeline  # type: ignore[import]
 
     pipeline = Pipeline.from_pretrained(
         "pyannote/speaker-diarization-3.1",

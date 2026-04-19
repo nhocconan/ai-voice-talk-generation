@@ -1,29 +1,38 @@
 """F5-TTS provider (placeholder — enabled when GPU available)."""
+
 from __future__ import annotations
+
 from pathlib import Path
-from .base import VoiceRef, AudioBytes
+from typing import ClassVar
+
 from ..logging import get_logger
+from .base import AudioBytes, VoiceRef
 
 logger = get_logger("provider.f5")
 
 
 class F5Provider:
     name = "F5_TTS"
-    supported_languages = ["vi", "en", "zh"]
+    supported_languages: ClassVar[list[str]] = ["vi", "en", "zh"]
     max_chunk_chars = 300
 
     _model = None
 
     async def prepare_voice(self, samples: list[Path]) -> VoiceRef:
         await self._load()
-        return VoiceRef(provider_name=self.name, data={"ref_audio": str(samples[0]), "ref_text": ""})
+        return VoiceRef(
+            provider_name=self.name, data={"ref_audio": str(samples[0]), "ref_text": ""}
+        )
 
-    async def synthesize(self, text: str, voice: VoiceRef, lang: str, speed: float = 1.0) -> AudioBytes:
+    async def synthesize(
+        self, text: str, voice: VoiceRef, lang: str, speed: float = 1.0
+    ) -> AudioBytes:
         await self._load()
         import asyncio
         import io
-        import soundfile as sf
+
         import numpy as np
+        import soundfile as sf
 
         ref_audio = voice.data["ref_audio"]
 
@@ -45,11 +54,14 @@ class F5Provider:
         if self._model is not None:
             return
         import asyncio
+
         from ..config import settings
+
         logger.info("Loading F5-TTS model…", device=settings.torch_device)
 
         def _init():
             from f5_tts.infer.utils_infer import load_model  # type: ignore[import]
+
             return load_model("F5TTS_v1_Base", vocab_file="")
 
         self._model = await asyncio.to_thread(_init)

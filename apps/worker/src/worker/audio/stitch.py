@@ -1,5 +1,7 @@
 """Audio stitching with crossfade."""
+
 from pathlib import Path
+
 import numpy as np
 import soundfile as sf
 
@@ -7,7 +9,9 @@ CROSSFADE_MS = 80
 SAMPLE_RATE = 24000
 
 
-def stitch_segments(segment_paths: list[Path], output_path: Path, crossfade_ms: int = CROSSFADE_MS) -> None:
+def stitch_segments(
+    segment_paths: list[Path], output_path: Path, crossfade_ms: int = CROSSFADE_MS
+) -> None:
     """Concatenate WAV segments with crossfade and write to output_path."""
     if not segment_paths:
         raise ValueError("No segments to stitch")
