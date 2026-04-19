@@ -177,13 +177,13 @@ export function EnrollmentWizard() {
       </p>
       <div className="flex gap-3 justify-center">
         <button
-          onClick={() => profileId && router.push(`/app/voices/${profileId}`)}
+          onClick={() => profileId && router.push(`/voices/${profileId}`)}
           className="h-10 px-6 rounded-[var(--radius-pill)] bg-black text-white text-button hover:opacity-90"
         >
           View Profile
         </button>
         <button
-          onClick={() => router.push("/app/voices")}
+          onClick={() => router.push("/voices")}
           className="h-10 px-6 rounded-[var(--radius-pill)] border border-[var(--color-border)] text-button hover:bg-[var(--color-surface-1)]"
         >
           All Profiles

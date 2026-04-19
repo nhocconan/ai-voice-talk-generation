@@ -57,6 +57,8 @@ export const voiceProfileRouter = router({
             signedAt: new Date().toISOString(),
             text: input.consentText,
             userId: ctx.session.user.id,
+            ip: ctx.ip ?? null,
+            userAgent: ctx.userAgent ?? null,
           },
         },
       })
@@ -134,7 +136,12 @@ export const voiceProfileRouter = router({
         throw new TRPCError({ code: "FORBIDDEN" })
       }
 
-      const nextVersion = profile.activeVersion + 1
+      const latestSample = await ctx.db.voiceSample.findFirst({
+        where: { profileId: input.profileId },
+        orderBy: { version: "desc" },
+        select: { version: true },
+      })
+      const nextVersion = (latestSample?.version ?? 0) + 1
 
       await enqueueIngestJob({
         profileId: input.profileId,
@@ -170,6 +177,15 @@ export const voiceProfileRouter = router({
       await ctx.db.voiceProfile.update({
         where: { id: input.profileId },
         data: { activeVersion: input.version },
+      })
+
+      await ctx.audit({
+        actorId: ctx.session.user.id,
+        action: "voiceProfile.setActiveVersion",
+        targetType: "VoiceProfile",
+        targetId: input.profileId,
+        meta: { version: input.version },
+        ip: ctx.ip,
       })
     }),
 

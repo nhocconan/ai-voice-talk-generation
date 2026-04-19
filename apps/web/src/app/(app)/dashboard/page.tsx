@@ -32,8 +32,8 @@ export default async function DashboardPage() {
 
       {/* Stats row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard icon={<MicIcon size={20} />} label="Voice Profiles" value={profileCount} href="/app/voices" />
-        <StatCard icon={<PlayCircleIcon size={20} />} label="Total Generations" value={recentGens.length} href="/app/history" />
+        <StatCard icon={<MicIcon size={20} />} label="Voice Profiles" value={profileCount} href="/voices" />
+        <StatCard icon={<PlayCircleIcon size={20} />} label="Total Generations" value={recentGens.length} href="/history" />
         <div
           className="bg-[var(--color-surface-0)] rounded-[var(--radius-card)] p-6"
           style={{ boxShadow: "var(--shadow-outline-ring), var(--shadow-soft-lift)" }}
@@ -59,9 +59,9 @@ export default async function DashboardPage() {
       <div>
         <h2 className="text-body-med mb-4">Quick Start</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <ActionCard href="/app/generate" label="New Presentation" desc="Single-speaker TTS from script" />
-          <ActionCard href="/app/generate/podcast" label="New Podcast" desc="Two-speaker timed script" />
-          <ActionCard href="/app/generate/revoice" label="Re-Voice Audio" desc="Replace voices in existing audio" />
+          <ActionCard href="/generate" label="New Presentation" desc="Single-speaker TTS from script" />
+          <ActionCard href="/generate/podcast" label="New Podcast" desc="Two-speaker timed script" />
+          <ActionCard href="/generate/revoice" label="Re-Voice Audio" desc="Replace voices in existing audio" />
         </div>
       </div>
 
@@ -70,13 +70,13 @@ export default async function DashboardPage() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-body-med">Recent</h2>
-            <Link href="/app/history" className="text-caption text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]">
+            <Link href="/history" className="text-caption text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]">
               View all →
             </Link>
           </div>
           <div className="space-y-2">
             {recentGens.map((g) => (
-              <Link key={g.id} href={`/app/history/${g.id}`} className="block">
+              <Link key={g.id} href={`/history/${g.id}`} className="block">
                 <div
                   className="flex items-center justify-between p-4 rounded-[var(--radius-md)] hover:bg-[var(--color-surface-1)] transition-colors"
                   style={{ border: "1px solid var(--color-border)" }}

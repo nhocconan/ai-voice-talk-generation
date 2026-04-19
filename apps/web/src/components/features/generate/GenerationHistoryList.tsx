@@ -39,7 +39,7 @@ export function GenerationHistoryList() {
     return (
       <div className="flex flex-col items-center justify-center rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border)] py-20 text-center">
         <p className="text-[var(--color-text-secondary)]">No generations yet.</p>
-        <a href="/app/generate" className="mt-3 text-sm text-[var(--color-accent)] hover:underline">
+        <a href="/generate" className="mt-3 text-sm text-[var(--color-accent)] hover:underline">
           Create your first one →
         </a>
       </div>

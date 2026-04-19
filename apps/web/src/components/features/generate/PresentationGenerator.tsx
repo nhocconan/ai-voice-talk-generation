@@ -34,7 +34,7 @@ export function PresentationGenerator() {
   }
 
   if (generationId) {
-    return <GenerationProgress generationId={generationId} onDone={() => router.push(`/app/history/${generationId}`)} />
+    return <GenerationProgress generationId={generationId} onDone={() => router.push(`/history/${generationId}`)} />
   }
 
   return (

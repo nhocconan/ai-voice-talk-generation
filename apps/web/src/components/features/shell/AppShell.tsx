@@ -12,10 +12,10 @@ import { useState } from "react"
 import { cn } from "@/lib/utils"
 
 const appNav = [
-  { href: "/app/dashboard", label: "Dashboard", icon: LayoutDashboardIcon },
-  { href: "/app/voices", label: "Voice Profiles", icon: MicIcon },
-  { href: "/app/generate", label: "Generate", icon: AudioLinesIcon },
-  { href: "/app/history", label: "History", icon: HistoryIcon },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboardIcon },
+  { href: "/voices", label: "Voice Profiles", icon: MicIcon },
+  { href: "/generate", label: "Generate", icon: AudioLinesIcon },
+  { href: "/history", label: "History", icon: HistoryIcon },
 ]
 
 const adminNav = [
@@ -49,7 +49,7 @@ export function AppShell({ children, session }: Props) {
       >
         {/* Logo */}
         <div className="px-6 py-5" style={{ borderBottom: "1px solid var(--color-border)" }}>
-          <Link href="/app/dashboard" className="block">
+          <Link href="/dashboard" className="block">
             <span className="text-display-card text-[var(--color-text-primary)]">Voice</span>
             <span className="text-display-card" style={{ color: "var(--color-accent)" }}>Studio</span>
           </Link>

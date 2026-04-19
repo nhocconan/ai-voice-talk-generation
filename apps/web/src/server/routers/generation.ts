@@ -72,6 +72,7 @@ export const generationRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       await enforceQuota(ctx, input.estimatedMinutes)
+      await assertProfilesReady(ctx.db, [input.profileId])
 
       const providerId = await resolveProvider(ctx, input.providerId)
 
@@ -115,6 +116,7 @@ export const generationRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       await enforceQuota(ctx, input.estimatedMinutes)
+      await assertProfilesReady(ctx.db, input.speakers.map((speaker) => speaker.profileId))
       const providerId = await resolveProvider(ctx, input.providerId)
 
       const script = input.speakers
@@ -179,6 +181,7 @@ export const generationRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       await enforceQuota(ctx, input.estimatedMinutes)
+      await assertProfilesReady(ctx.db, input.speakers.map((speaker) => speaker.profileId))
       const providerId = await resolveProvider(ctx, input.providerId)
 
       const generation = await ctx.db.generation.create({
@@ -298,4 +301,34 @@ function formatMs(ms: number): string {
   const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0")
   const seconds = (totalSeconds % 60).toString().padStart(2, "0")
   return `${minutes}:${seconds}`
+}
+
+async function assertProfilesReady(
+  prisma: typeof db,
+  profileIds: string[],
+): Promise<void> {
+  const uniqueProfileIds = [...new Set(profileIds)]
+  const profiles = await prisma.voiceProfile.findMany({
+    where: { id: { in: uniqueProfileIds } },
+    select: {
+      id: true,
+      name: true,
+      activeVersion: true,
+      samples: {
+        select: { version: true },
+      },
+    },
+  })
+
+  if (profiles.length !== uniqueProfileIds.length) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "One or more voice profiles were not found" })
+  }
+
+  const notReady = profiles.find((profile) => !profile.samples.some((sample) => sample.version === profile.activeVersion))
+  if (notReady) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `Voice profile "${notReady.name}" is still processing. Wait for its active sample to finish ingesting before rendering.`,
+    })
+  }
 }

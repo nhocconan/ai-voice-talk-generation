@@ -42,7 +42,7 @@ export function AcceptInviteForm({ searchParams }: { searchParams: Promise<{ tok
         return
       }
 
-      router.push("/app/dashboard")
+      router.push("/dashboard")
       router.refresh()
     } catch (e) {
       setServerError(e instanceof Error ? e.message : "An error occurred")
