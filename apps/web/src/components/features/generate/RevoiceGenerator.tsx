@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react"
 import { trpc } from "@/lib/trpc/client"
 import { parseTimedScript } from "@/lib/timed-script"
 import { ProfileSelector } from "./ProfileSelector"
+import { ProviderSelector } from "./ProviderSelector"
 import { GenerationProgress } from "./GenerationProgress"
 
 export function RevoiceGenerator() {
@@ -12,6 +13,7 @@ export function RevoiceGenerator() {
   const [uploading, setUploading] = useState(false)
   const [profileAId, setProfileAId] = useState("")
   const [profileBId, setProfileBId] = useState("")
+  const [providerId, setProviderId] = useState("")
   const [script, setScript] = useState("")
   const [parseError, setParseError] = useState<string | null>(null)
   const [generationId, setGenerationId] = useState<string | null>(null)
@@ -79,6 +81,7 @@ export function RevoiceGenerator() {
       revoiceMutation.mutate({
         sourceAudioKey: storageKey,
         estimatedMinutes,
+        providerId: providerId || undefined,
         speakers,
       })
     } catch (error) {
@@ -126,6 +129,14 @@ export function RevoiceGenerator() {
           <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">3. Speaker B</h2>
           <ProfileSelector value={profileBId} onChange={setProfileBId} />
         </div>
+      </div>
+
+      <div className="space-y-3">
+        <ProviderSelector
+          value={providerId}
+          onChange={setProviderId}
+          description="Use a specific provider for re-voicing when timing or similarity tests matter."
+        />
       </div>
 
       <div className="space-y-3">

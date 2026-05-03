@@ -21,6 +21,48 @@ async function main() {
 
   // Default provider configs
   await prisma.providerConfig.upsert({
+    where: { name: ProviderName.VIENEU_TTS },
+    update: {
+      config: { model: "pnnbao-ump/VieNeu-TTS", mode: "local", device: "mps", maxChunkChars: 320 },
+    },
+    create: {
+      name: ProviderName.VIENEU_TTS,
+      enabled: false,
+      isDefault: false,
+      config: { model: "pnnbao-ump/VieNeu-TTS", mode: "local", device: "mps", maxChunkChars: 320 },
+    },
+  })
+
+  await prisma.providerConfig.upsert({
+    where: { name: ProviderName.VOXCPM2 },
+    update: {
+      config: {
+        model: "openbmb/VoxCPM2",
+        device: "cuda",
+        cfgValue: 2,
+        inferenceTimesteps: 10,
+        loadDenoiser: false,
+        usePromptClone: false,
+        maxChunkChars: 260,
+      },
+    },
+    create: {
+      name: ProviderName.VOXCPM2,
+      enabled: false,
+      isDefault: false,
+      config: {
+        model: "openbmb/VoxCPM2",
+        device: "cuda",
+        cfgValue: 2,
+        inferenceTimesteps: 10,
+        loadDenoiser: false,
+        usePromptClone: false,
+        maxChunkChars: 260,
+      },
+    },
+  })
+
+  await prisma.providerConfig.upsert({
     where: { name: ProviderName.XTTS_V2 },
     update: {},
     create: {
@@ -64,6 +106,54 @@ async function main() {
     },
   })
 
+  await prisma.providerConfig.upsert({
+    where: { name: ProviderName.VIBEVOICE },
+    update: {},
+    create: {
+      name: ProviderName.VIBEVOICE,
+      enabled: false,
+      isDefault: false,
+      config: { model: "vibevoice-1.5b", device: "cuda" },
+    },
+  })
+
+  await prisma.providerConfig.upsert({
+    where: { name: ProviderName.XIAOMI_TTS },
+    update: {},
+    create: {
+      name: ProviderName.XIAOMI_TTS,
+      enabled: false,
+      isDefault: false,
+      config: {
+        baseUrl: "",
+        model: "mimo-v2.5-tts",
+        cloneModel: "mimo-v2.5-tts-voiceclone",
+        voice: "Chloe",
+        format: "wav",
+        style: "",
+        maxChunkChars: 1500,
+      },
+    },
+  })
+
+  await prisma.providerConfig.upsert({
+    where: { name: ProviderName.XAI_TTS },
+    update: {},
+    create: {
+      name: ProviderName.XAI_TTS,
+      enabled: false,
+      isDefault: false,
+      config: {
+        voice: "eve",
+        codec: "mp3",
+        sampleRate: 24000,
+        bitRate: 128000,
+        textNormalization: false,
+        maxChunkChars: 5000,
+      },
+    },
+  })
+
   // Default settings
   const settings: Array<{ key: string; value: Prisma.InputJsonValue }> = [
     { key: "retention.renderDays", value: 90 },
@@ -72,6 +162,7 @@ async function main() {
     { key: "branding.accentHex", value: "#E5001A" },
     { key: "feature.orgSharedLibrary", value: true },
     { key: "feature.publicShareLinks", value: false },
+    { key: "webhook.url", value: "" },
   ]
 
   for (const s of settings) {

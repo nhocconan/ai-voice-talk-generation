@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 
 const schema = z.object({
   email: z.string().email("Invalid email"),
@@ -81,6 +82,12 @@ export function LoginForm() {
       >
         {loading ? "Signing in…" : "Sign in"}
       </button>
+
+      <p className="text-center text-caption text-[var(--color-text-muted)]">
+        <Link href="/forgot-password" className="text-[var(--color-accent)] hover:underline">
+          Forgot password?
+        </Link>
+      </p>
     </form>
   )
 }

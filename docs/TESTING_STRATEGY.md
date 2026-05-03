@@ -56,6 +56,7 @@ Most bugs get caught cheapest at the static / unit layer. Invest there first.
 - Project floor: **70% lines on changed files.**
 - New code in this PR: **≥ 80% lines, ≥ 70% branches.**
 - 100% on security-sensitive modules: auth, crypto, RBAC middleware, presigned URL signing.
+- Worker unit coverage excludes runtime entrypoints and provider backends (`main.py`, tracing, `providers/*`). Those paths are verified through integration tests, provider contract tests, and live provider smoke tests instead of mocked line coverage.
 - Coverage is a guardrail, not a goal. A passing test that proves behavior beats two that only touch lines.
 
 ## 5. What NOT to test
@@ -76,7 +77,7 @@ Most bugs get caught cheapest at the static / unit layer. Invest there first.
 
 ## 7. Provider contract test
 
-Every provider implementation (`XTTSProvider`, `F5Provider`, `ElevenLabsProvider`, `GeminiTTSProvider`) must pass the shared contract test:
+Every production provider implementation (`VieNeuProvider`, `VoxCPM2Provider`, `XTTSProvider`, `F5Provider`, `ElevenLabsProvider`, `GeminiTTSProvider`) must pass the shared contract test:
 
 ```
 tests/providers/contract_test.py:
@@ -87,11 +88,21 @@ tests/providers/contract_test.py:
   - test_close_releases_resources
 ```
 
-Run with `pytest tests/providers/contract_test.py -k xtts` etc. A new provider PR must add itself to this matrix. Cloud providers run against a **VCR cassette** (recorded fixture) in CI; a weekly scheduled workflow re-records against live APIs.
+Run with `pytest tests/providers/contract_test.py -k vieneu` etc. A new provider PR must add itself to this matrix. Cloud providers run against a **VCR cassette** (recorded fixture) in CI; a weekly scheduled workflow re-records against live APIs.
+
+`VibeVoiceProvider` is intentionally excluded until the current worker stub is replaced by a real inference backend.
+
+For local providers, code-level tests are not enough. Before changing the default provider on a real host, the operator must also:
+
+- pass the `/admin/providers` live `Test` action on the target machine
+- render one 15-second preview and one 30-second Vietnamese sample end to end
+- record the result in `docs/BENCHMARKS.md` when the change is part of a release candidate
 
 ## 8. Performance tests (Phase 3+)
 
 - **Render latency benchmark:** `scripts/bench/render.py` renders a fixed 60-second script with each active provider; stores results to `docs/BENCHMARKS.md`. Run on release candidates.
+- **Mac benchmark:** run `VieNeu-TTS` and `VoxCPM2` on the target Apple Silicon host with `TORCH_DEVICE=mps`; record wall time, peak RAM, and operator MOS notes.
+- **GPU benchmark:** run `VoxCPM2` with `device=cuda` on the production GPU host before promoting it to default.
 - **Queue load test:** k6 script pushes 100 render jobs; asserts P95 completion time on a reference host.
 
 ## 9. Quality of voice output (human-in-loop)

@@ -58,6 +58,8 @@ Pinned versions are intentional — see `CODING_GUIDELINES.md` for upgrade polic
 | ASR | faster-whisper | latest (large-v3) | CTranslate2 backend |
 | Diarization | pyannote.audio | 3.x | HF token required |
 | Text processing (VI) | underthesea | latest | Vietnamese sentence tokenization |
+| TTS — VieNeu-TTS | `vieneu` SDK (optional extra) | latest | Primary Mac-first Vietnamese local provider |
+| TTS — VoxCPM2 | `voxcpm` (optional extra) | latest | Advanced-quality multilingual provider; best on CUDA |
 | TTS — XTTS-v2 | coqui-tts fork (idiap) | latest | PyTorch MPS on Apple Silicon |
 | TTS — F5-TTS | F5-TTS | latest | PyTorch MPS |
 | TTS — ElevenLabs | httpx | — | REST, streaming response |
@@ -94,10 +96,21 @@ Pinned versions are intentional — see `CODING_GUIDELINES.md` for upgrade polic
 - The entire ML ecosystem is Python. Forcing Node inference (ONNX, node-addon-api) hurts quality and dev speed.
 - The queue boundary gives us a hard isolation point: web stays fast even if a render hangs.
 
-### Why pluggable providers over committing to VibeVoice/VoxCPM now?
-- Our hardware (Apple Silicon, 16 GB) can't reliably run VibeVoice-7B. XTTS-v2 and F5-TTS are the realistic local choices today.
-- Vietnamese quality varies wildly between models; empirical A/B will decide the default.
-- Cloud providers (ElevenLabs, Gemini TTS) are an immediate quality backstop without committing long-term.
+### Why pluggable providers over committing to one single engine?
+- `VieNeu-TTS` is now the primary local Mac-first choice for Vietnamese, but we still need a second lane for quality comparisons and future Linux+GPU promotion.
+- `VoxCPM2` gives us the stronger long-term multilingual quality path, even if the official fast path is still CUDA-first.
+- `XTTS-v2` and `F5-TTS` remain useful fallbacks while we gather internal A/B data.
+- Cloud providers (`ElevenLabs`, `Gemini TTS`) remain the operational backstop when local throughput or quality is not acceptable.
+
+### Why VieNeu-TTS first on Mac?
+- It is Vietnamese-first, supports instant voice cloning from short samples, and has a realistic Apple Silicon story.
+- It supports both a direct SDK path and a remote-server path, which maps cleanly to our worker/provider abstraction.
+- For the current low-volume MVP, marginal generation cost is near zero once the Mac host is provisioned.
+
+### Why add VoxCPM2 now?
+- It gives the product a serious high-quality multilingual lane with controllable cloning and style prompting.
+- It creates a clean path toward future Linux+GPU scale-out without redesigning the provider abstraction later.
+- Even when it is not the default on Mac, it is valuable for targeted A/B tests on leadership voices.
 
 ### Why Prisma + Postgres over Drizzle / Mongo?
 - Prisma's migration story is mature and approachable for a small team.
@@ -121,6 +134,8 @@ Pinned versions are intentional — see `CODING_GUIDELINES.md` for upgrade polic
 
 | Package | License | OK for internal commercial use? |
 |---|---|---|
+| VieNeu-TTS | Apache 2.0 (repo) | Yes, but the operator must still verify the exact model artifact selected in provider config |
+| VoxCPM2 | Apache 2.0 | Yes |
 | XTTS-v2 (coqui-tts) | MPL 2.0 (code) + CPML (weights, non-commercial original) → use **idiap/coqui-ai-TTS** fork weights | Needs confirmation; fallback to F5-TTS |
 | F5-TTS | Apache 2.0 | Yes |
 | faster-whisper | MIT | Yes |
@@ -156,8 +171,13 @@ GOOGLE_API_KEY=<for Gemini, optional>
 ELEVENLABS_API_KEY=<optional, normally stored encrypted in DB via admin>
 TORCH_DEVICE=mps|cuda|cpu
 WORKER_CONCURRENCY=1
+
+# Optional local-provider extras
+# cd apps/worker && uv sync --extra vieneu
+# cd apps/worker && uv sync --extra voxcpm
 ```
 
 ## Changelog
 - 2026-04-19: v1.0 initial stack.
 - 2026-04-19: Updated queue transport to Redis Streams and aligned worker/web contract notes with the implementation.
+- 2026-04-20: Added VieNeu-TTS and VoxCPM2 to the supported provider matrix and local Mac deployment guidance.

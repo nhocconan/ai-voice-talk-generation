@@ -9,7 +9,7 @@ export default function AdminProvidersPage() {
       <div>
         <h1 className="text-display-card">TTS Providers</h1>
         <p className="text-body text-[var(--color-text-secondary)] mt-1">
-          Configure voice synthesis providers. API keys are encrypted at rest.
+          Configure voice synthesis providers. API keys are encrypted at rest, and each card includes official links plus step-by-step runtime setup.
         </p>
       </div>
       <ProviderManager />

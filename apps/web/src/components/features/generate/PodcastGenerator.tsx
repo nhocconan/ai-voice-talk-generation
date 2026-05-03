@@ -3,14 +3,16 @@
 import { useMemo, useState } from "react"
 import { trpc } from "@/lib/trpc/client"
 import { parseTimedScript } from "@/lib/timed-script"
-import { ProfileSelector } from "./ProfileSelector";
-import { GenerationProgress } from "./GenerationProgress";
+import { ProfileSelector } from "./ProfileSelector"
+import { ProviderSelector } from "./ProviderSelector"
+import { GenerationProgress } from "./GenerationProgress"
 
 const DEFAULT_SCRIPT = `[00:00 A] Xin chao va chao mung den voi ban tin hom nay.\n[00:08 B] Cam on ban. Chung ta se bat dau voi cac cap nhat moi nhat.`
 
 export function PodcastGenerator() {
   const [profileAId, setProfileAId] = useState("")
   const [profileBId, setProfileBId] = useState("")
+  const [providerId, setProviderId] = useState("")
   const [script, setScript] = useState(DEFAULT_SCRIPT)
   const [generationId, setGenerationId] = useState<string | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
@@ -48,6 +50,7 @@ export function PodcastGenerator() {
 
       mutation.mutate({
         estimatedMinutes,
+        providerId: providerId || undefined,
         speakers,
       })
     } catch (error) {
@@ -84,6 +87,14 @@ export function PodcastGenerator() {
             Leave empty to reuse speaker A&apos;s voice.
           </p>
         </div>
+      </div>
+
+      <div className="space-y-3">
+        <ProviderSelector
+          value={providerId}
+          onChange={setProviderId}
+          description="Override the default provider when you want to compare long-form quality or cost."
+        />
       </div>
 
       <div className="space-y-3">
