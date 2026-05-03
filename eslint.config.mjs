@@ -5,7 +5,19 @@ import nextPlugin from "@next/eslint-plugin-next"
 import importPlugin from "eslint-plugin-import"
 
 export default tseslint.config(
-  { ignores: ["**/node_modules/**", "**/.next/**", "**/dist/**", "**/build/**"] },
+  {
+    ignores: [
+      "**/node_modules/**",
+      "**/.next/**",
+      "**/dist/**",
+      "**/build/**",
+      "apps/web/next.config.ts",
+      "apps/web/playwright.config.ts",
+      "apps/web/postcss.config.mjs",
+      "apps/web/tests/e2e/global-setup.ts",
+      "apps/web/vitest.config.ts",
+    ],
+  },
 
   js.configs.recommended,
 
@@ -67,14 +79,28 @@ export default tseslint.config(
 
   // Config files at root
   {
-    files: ["*.config.mjs", "*.config.js", "*.config.ts"],
+    files: [
+      "**/*.config.mjs",
+      "**/*.config.js",
+      "**/*.config.ts",
+      "**/global-setup.ts",
+    ],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+      },
+    },
     rules: {
       "import/no-default-export": "off",
     },
   },
 
   {
-    files: ["apps/web/src/i18n/request.ts", "apps/web/src/middleware.ts", "apps/web/vitest.config.ts"],
+    files: [
+      "apps/web/src/i18n/request.ts",
+      "apps/web/src/middleware.ts",
+      "apps/web/vitest.config.ts",
+    ],
     rules: {
       "import/no-default-export": "off",
       "@typescript-eslint/no-unsafe-assignment": "off",

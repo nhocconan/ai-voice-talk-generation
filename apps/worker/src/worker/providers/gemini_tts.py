@@ -30,20 +30,26 @@ class GeminiTTSProvider:
     ]
     max_chunk_chars = 5000
 
-    def __init__(self, api_key_enc: str | None = None) -> None:
+    def __init__(self, api_key_enc: str | None = None, config: dict | None = None) -> None:
+        self._config = config or {}
         raw = api_key_enc or settings.google_api_key
         self._api_key = decrypt_api_key(raw) if (raw and len(raw) > 40) else raw or ""
-        self._model = "gemini-2.5-flash-preview-tts"
+        self._model = str(self._config.get("model", "gemini-2.5-flash-preview-tts"))
+        self.max_chunk_chars = int(self._config.get("maxChunkChars", 5000))
 
     async def prepare_voice(self, samples: list[Path]) -> VoiceRef:
         # Gemini TTS doesn't support custom voice cloning via standard API
         # Use a predefined voice mapped to the sample language
         return VoiceRef(
-            provider_name=self.name, data={"voice_name": "Aoede", "sample_path": str(samples[0])}
+            provider_name=self.name,
+            data={
+                "voice_name": str(self._config.get("voiceName", "Aoede")),
+                "sample_path": str(samples[0]),
+            },
         )
 
     async def synthesize(
-        self, text: str, voice: VoiceRef, lang: str, speed: float = 1.0
+        self, text: str, voice: VoiceRef, lang: str, speed: float = 1.0, style: str | None = None
     ) -> AudioBytes:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{self._model}:generateContent?key={self._api_key}"
 

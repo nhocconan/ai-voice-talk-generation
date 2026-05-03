@@ -5,9 +5,9 @@ import { TRPCError } from "@trpc/server"
 import { encryptApiKey } from "@/server/services/crypto"
 
 const settingValueSchema = z.union([
-  z.number().int().min(1),
   z.number().int().min(0),
-  z.string().regex(/^#[0-9A-F]{6}$/),
+  z.string(),
+  z.boolean(),
 ])
 
 function validateSettingInput(key: string, value: unknown) {
@@ -23,6 +23,15 @@ function validateSettingInput(key: string, value: unknown) {
     }
     case "branding.accentHex": {
       return z.string().regex(/^#[0-9A-F]{6}$/).parse(String(value).toUpperCase())
+    }
+    case "webhook.url": {
+      const val = String(value)
+      if (val && !val.startsWith("https://")) throw new TRPCError({ code: "BAD_REQUEST", message: "Webhook URL must start with https://" })
+      return val
+    }
+    case "feature.publicShareLinks":
+    case "feature.orgSharedLibrary": {
+      return z.boolean().parse(value)
     }
     default:
       throw new TRPCError({ code: "BAD_REQUEST", message: `Unsupported setting key: ${key}` })

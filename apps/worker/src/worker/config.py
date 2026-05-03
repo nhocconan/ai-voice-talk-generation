@@ -1,4 +1,5 @@
-import torch
+from __future__ import annotations
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -18,6 +19,8 @@ class Settings(BaseSettings):
     hf_token: str = ""
     google_api_key: str = ""
     elevenlabs_api_key: str = ""
+    xiaomi_api_key: str = ""
+    xai_api_key: str = ""
 
     torch_device: str = "cpu"
     worker_concurrency: int = 1
@@ -30,6 +33,10 @@ class Settings(BaseSettings):
     @field_validator("torch_device")
     @classmethod
     def validate_device(cls, v: str) -> str:
+        try:
+            import torch  # lazy import — torch is only needed at inference time
+        except ImportError:
+            return "cpu"
         if v == "cuda" and not torch.cuda.is_available():
             raise ValueError("CUDA requested but not available — set TORCH_DEVICE=cpu or mps")
         if v == "mps" and not (

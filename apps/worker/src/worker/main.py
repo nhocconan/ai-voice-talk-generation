@@ -16,8 +16,10 @@ from .pipelines.ingest import run_ingest
 from .pipelines.render import run_render
 from .providers.registry import get_provider
 from .queue import QueueConsumer, publish_progress
+from .tracing import setup_tracing, span
 
 setup_logging()
+setup_tracing()
 logger = get_logger("main")
 
 # Metrics
@@ -105,6 +107,39 @@ async def _db_asr_result(*, generation_id: str, segments: list) -> None:
         conn.close()
 
 
+async def _fire_webhook(payload: dict) -> None:
+    """P4-04: Fire Slack/Teams webhook if configured in settings table."""
+    import json
+    import os
+    import urllib.request
+
+    import psycopg2
+
+    try:
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT value FROM settings WHERE key='webhook.url'")
+                row = cur.fetchone()
+        finally:
+            conn.close()
+
+        if not row or not row[0]:
+            return
+
+        webhook_url = row[0] if isinstance(row[0], str) else str(row[0])
+        body = json.dumps(payload).encode()
+        req = urllib.request.Request(
+            webhook_url,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=10)  # noqa: S310
+    except Exception as exc:
+        logger.warning("Webhook delivery failed", error=str(exc))
+
+
 async def _db_render_result(
     *,
     generation_id: str,
@@ -132,6 +167,13 @@ async def _db_render_result(
     finally:
         conn.close()
 
+    await _fire_webhook({
+        "event": "generation.done",
+        "generationId": generation_id,
+        "durationMs": duration_ms,
+        "mp3Key": output_mp3_key,
+    })
+
 
 async def _db_render_failed(*, generation_id: str, error: str) -> None:
     import os
@@ -152,6 +194,12 @@ async def _db_render_failed(*, generation_id: str, error: str) -> None:
         conn.commit()
     finally:
         conn.close()
+
+    await _fire_webhook({
+        "event": "generation.failed",
+        "generationId": generation_id,
+        "errorMessage": error,
+    })
 
 
 async def _get_provider_for_generation(provider_id: str):
@@ -221,20 +269,21 @@ async def handle_ingest(job_name: str, data: object) -> None:
         raise TypeError(f"{job_name} expected IngestJobPayload")
 
     INGEST_TOTAL.labels(status="started").inc()
-    try:
-        await run_ingest(
-            profile_id=data.profile_id,
-            storage_key=data.storage_key,
-            version=data.version,
-            user_id=data.user_id,
-            notes=data.notes,
-            db_update_fn=_db_update_sample,
-        )
-        INGEST_TOTAL.labels(status="success").inc()
-    except Exception as e:
-        logger.error("Ingest job failed", error=str(e))
-        INGEST_TOTAL.labels(status="failed").inc()
-        raise
+    with span("ingest.enroll", {"profile_id": data.profile_id, "version": data.version}):
+        try:
+            await run_ingest(
+                profile_id=data.profile_id,
+                storage_key=data.storage_key,
+                version=data.version,
+                user_id=data.user_id,
+                notes=data.notes,
+                db_update_fn=_db_update_sample,
+            )
+            INGEST_TOTAL.labels(status="success").inc()
+        except Exception as e:
+            logger.error("Ingest job failed", error=str(e))
+            INGEST_TOTAL.labels(status="failed").inc()
+            raise
 
 
 async def handle_asr(job_name: str, data: object) -> None:
@@ -263,50 +312,51 @@ async def handle_render(job_name: str, data: object) -> None:
     provider_name = "unknown"
     t0 = time.monotonic()
 
-    try:
-        provider = await _get_provider_for_generation(provider_id)
-        provider_name = provider.name
+    with span("render.generation", {"generation_id": generation_id, "kind": kind}):
+        try:
+            provider = await _get_provider_for_generation(provider_id)
+            provider_name = provider.name
 
-        # Mark running
-        import psycopg2
+            # Mark running
+            import psycopg2
 
-        conn = psycopg2.connect(os.environ["DATABASE_URL"])
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE generations SET status='RUNNING', \"startedAt\"=now() WHERE id=%s",
-                (generation_id,),
+            conn = psycopg2.connect(os.environ["DATABASE_URL"])
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE generations SET status='RUNNING', \"startedAt\"=now() WHERE id=%s",
+                    (generation_id,),
+                )
+            conn.commit()
+            conn.close()
+
+            speakers = await _get_speaker_sample_keys(
+                [speaker.model_dump(by_alias=True) for speaker in data.speakers]
             )
-        conn.commit()
-        conn.close()
 
-        speakers = await _get_speaker_sample_keys(
-            [speaker.model_dump(by_alias=True) for speaker in data.speakers]
-        )
+            async def progress(gid: str, pct: float, msg: str) -> None:
+                await publish_progress(gid, "CHUNK", pct, msg)
 
-        async def progress(gid: str, pct: float, msg: str) -> None:
-            await publish_progress(gid, "CHUNK", pct, msg)
+            await run_render(
+                generation_id=generation_id,
+                kind=kind,
+                provider=provider,
+                speakers=speakers,
+                output=data.output.model_dump(),
+                pacing_lock=data.pacing_lock,
+                progress_fn=progress,
+                result_fn=_db_render_result,
+            )
 
-        await run_render(
-            generation_id=generation_id,
-            kind=kind,
-            provider=provider,
-            speakers=speakers,
-            output=data.output.model_dump(),
-            pacing_lock=data.pacing_lock,
-            progress_fn=progress,
-            result_fn=_db_render_result,
-        )
+            RENDERS_TOTAL.labels(status="success", provider=provider_name).inc()
+            RENDER_DURATION.labels(provider=provider_name, kind=kind).observe(time.monotonic() - t0)
+            await publish_progress(generation_id, "DONE", 1.0, "Generation complete")
 
-        RENDERS_TOTAL.labels(status="success", provider=provider_name).inc()
-        RENDER_DURATION.labels(provider=provider_name, kind=kind).observe(time.monotonic() - t0)
-        await publish_progress(generation_id, "DONE", 1.0, "Generation complete")
-
-    except Exception as e:
-        logger.error("Render failed", generation_id=generation_id, error=str(e))
-        RENDERS_TOTAL.labels(status="failed", provider=provider_name).inc()
-        await _db_render_failed(generation_id=generation_id, error=str(e))
-        await publish_progress(generation_id, "FAILED", 0.0, str(e))
-        raise
+        except Exception as e:
+            logger.error("Render failed", generation_id=generation_id, error=str(e))
+            RENDERS_TOTAL.labels(status="failed", provider=provider_name).inc()
+            await _db_render_failed(generation_id=generation_id, error=str(e))
+            await publish_progress(generation_id, "FAILED", 0.0, str(e))
+            raise
 
 
 # ---- FastAPI app + lifecycle ------------------------------------------------
@@ -361,6 +411,99 @@ async def readyz():
     finally:
         await r.aclose()
     return {"status": "ready"}
+
+
+from pydantic import BaseModel as _BaseModel  # noqa: E402
+
+
+class ProviderTestRequest(_BaseModel):
+    provider_id: str
+
+
+@app.post("/provider-test")
+async def provider_test(req: ProviderTestRequest):
+    from fastapi.responses import JSONResponse
+
+    try:
+        provider = await _get_provider_for_generation(req.provider_id)
+        self_test = getattr(provider, "self_test", None)
+        if callable(self_test):
+            message = await self_test()
+        else:
+            message = f"{provider.name} is configured."
+        return {"ok": True, "message": message}
+    except Exception as exc:
+        logger.error("Provider self-test failed", provider_id=req.provider_id, error=str(exc))
+        return JSONResponse(status_code=500, content={"ok": False, "message": str(exc)})
+
+# ---- Preview endpoint (FR-Flow 5.2) ----------------------------------------
+
+
+class PreviewRequest(_BaseModel):
+    provider_id: str
+    profile_id: str
+    script: str
+    # How many characters to render (≈15 s at average speaking rate)
+    max_chars: int = 250
+
+
+@app.post("/preview")
+async def preview_audio(req: PreviewRequest):
+    """Render first ~15 s of a script and return presigned URL."""
+    import tempfile
+    import uuid
+    from pathlib import Path
+
+    from fastapi.responses import JSONResponse
+
+    from .audio.io import encode_mp3
+    from .pipelines.render import _chunk_text, _bytes_to_wav
+    from .providers.base import VoiceRef
+    from .services.storage import download_object, upload_object, generate_presigned_get
+
+    try:
+        provider = await _get_provider_for_generation(req.provider_id)
+        speakers = await _get_speaker_sample_keys([{"label": "A", "profileId": req.profile_id, "segments": []}])
+        spk = speakers[0]
+
+        # Trim script to max_chars at sentence boundary
+        trimmed = req.script[: req.max_chars]
+        chunks = _chunk_text(trimmed, provider.max_chunk_chars, lang=spk.get("lang", "vi"))[:3]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            # Download reference sample
+            voice_ref = VoiceRef("", {})
+            for key in spk.get("sample_keys", []):
+                dest = tmp_dir / Path(key).name
+                await asyncio.to_thread(download_object, key, dest)
+                voice_ref = await provider.prepare_voice([dest])
+                break
+
+            # Render chunks
+            from .audio.stitch import stitch_segments
+            segment_wavs = []
+            for i, chunk in enumerate(chunks):
+                audio_bytes = await provider.synthesize(chunk, voice_ref, spk.get("lang", "vi"))
+                seg_path = tmp_dir / f"preview_seg_{i}.wav"
+                _bytes_to_wav(audio_bytes, seg_path)
+                segment_wavs.append(seg_path)
+
+            stitched = tmp_dir / "preview_stitched.wav"
+            stitch_segments(segment_wavs, stitched)
+
+            mp3_path = tmp_dir / "preview.mp3"
+            await encode_mp3(stitched, mp3_path)
+
+            preview_key = f"previews/{uuid.uuid4()}.mp3"
+            await asyncio.to_thread(upload_object, mp3_path, preview_key, "audio/mpeg")
+
+        url = await asyncio.to_thread(generate_presigned_get, preview_key, 300)
+        return {"url": url, "key": preview_key}
+
+    except Exception as exc:
+        logger.error("Preview failed", error=str(exc))
+        return JSONResponse(status_code=500, content={"error": str(exc)})
 
 
 if __name__ == "__main__":

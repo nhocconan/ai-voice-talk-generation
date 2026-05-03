@@ -18,27 +18,35 @@ LANG_MAP = {"vi": "vi", "en": "en", "multi": "en"}  # XTTS uses ISO codes
 class XTTSProvider:
     name = "XTTS_V2"
     supported_languages: ClassVar[list[str]] = ["vi", "en", "zh-cn", "fr", "de", "es", "pt"]
-    max_chunk_chars = 250
 
     _tts: Any = None
     _lock: asyncio.Lock
 
-    def __init__(self) -> None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
+        self._config = config or {}
+        self.max_chunk_chars = int(self._config.get("maxChunkChars", 250))
         self._lock = asyncio.Lock()
+
+    def _model_name(self) -> str:
+        return str(self._config.get("model", "tts_models/multilingual/multi-dataset/xtts_v2"))
+
+    def _device(self) -> str:
+        return str(self._config.get("device", settings.torch_device))
 
     async def _load_model(self) -> None:
         async with self._lock:
             if self._tts is not None:
                 return
-            logger.info("Loading XTTS-v2 model…", device=settings.torch_device)
+            device = self._device()
+            model_name = self._model_name()
+            logger.info("Loading XTTS-v2 model…", device=device, model=model_name)
             # Import here so startup doesn't fail if torch not present
             from TTS.api import TTS  # type: ignore[import]
 
-            device = settings.torch_device
             self._tts = await asyncio.to_thread(
-                lambda: TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
+                lambda: TTS(model_name).to(device)
             )
-            logger.info("XTTS-v2 loaded", device=device)
+            logger.info("XTTS-v2 loaded", device=device, model=model_name)
 
     async def prepare_voice(self, samples: list[Path]) -> VoiceRef:
         await self._load_model()
@@ -49,7 +57,7 @@ class XTTSProvider:
         )
 
     async def synthesize(
-        self, text: str, voice: VoiceRef, lang: str, speed: float = 1.0
+        self, text: str, voice: VoiceRef, lang: str, speed: float = 1.0, style: str | None = None
     ) -> AudioBytes:
         await self._load_model()
         import io
@@ -75,3 +83,7 @@ class XTTSProvider:
 
     async def close(self) -> None:
         self._tts = None
+
+    async def self_test(self) -> str:
+        await self._load_model()
+        return f"XTTS-v2 loaded on {self._device()} ({self._model_name()})."

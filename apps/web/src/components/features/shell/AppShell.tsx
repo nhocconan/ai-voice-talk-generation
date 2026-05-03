@@ -7,6 +7,7 @@ import { signOut } from "next-auth/react"
 import {
   LayoutDashboardIcon, MicIcon, PlayCircleIcon, HistoryIcon,
   UsersIcon, SettingsIcon, LogOutIcon, MenuIcon, XIcon, AudioLinesIcon,
+  ActivityIcon, HelpCircleIcon,
 } from "lucide-react"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
@@ -24,7 +25,9 @@ const adminNav = [
   { href: "/admin/library", label: "Voice Library", icon: MicIcon },
   { href: "/admin/generations", label: "Generations", icon: PlayCircleIcon },
   { href: "/admin/audit", label: "Audit Log", icon: HistoryIcon },
+  { href: "/admin/system-health", label: "System Health", icon: ActivityIcon },
   { href: "/admin/settings", label: "Settings", icon: SettingsIcon },
+  { href: "/admin/help", label: "Help / Manual", icon: HelpCircleIcon },
 ]
 
 interface Props {

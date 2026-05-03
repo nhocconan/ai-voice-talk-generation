@@ -31,9 +31,14 @@ class ElevenLabsProvider:
     ]
     max_chunk_chars = 2500
 
-    def __init__(self, api_key_enc: str | None = None) -> None:
+    def __init__(self, api_key_enc: str | None = None, config: dict | None = None) -> None:
+        self._config = config or {}
         raw = api_key_enc or settings.elevenlabs_api_key
         self._api_key = decrypt_api_key(raw) if (raw and len(raw) > 40) else raw or ""
+        self.max_chunk_chars = int(self._config.get("maxChunkChars", 2500))
+
+    def _model_name(self) -> str:
+        return str(self._config.get("model", "eleven_multilingual_v2"))
 
     async def prepare_voice(self, samples: list[Path]) -> VoiceRef:
         """Clone voice via ElevenLabs /voices/add."""
@@ -51,7 +56,7 @@ class ElevenLabsProvider:
             return VoiceRef(provider_name=self.name, data={"voice_id": voice_id})
 
     async def synthesize(
-        self, text: str, voice: VoiceRef, lang: str, speed: float = 1.0
+        self, text: str, voice: VoiceRef, lang: str, speed: float = 1.0, style: str | None = None
     ) -> AudioBytes:
         voice_id = voice.data["voice_id"]
         async with httpx.AsyncClient(timeout=120) as client:
@@ -60,12 +65,12 @@ class ElevenLabsProvider:
                 headers={"xi-api-key": self._api_key, "Accept": "audio/mpeg"},
                 json={
                     "text": text,
-                    "model_id": "eleven_multilingual_v2",
+                    "model_id": self._model_name(),
                     "voice_settings": {
-                        "stability": 0.5,
-                        "similarity_boost": 0.8,
-                        "style": 0.0,
-                        "use_speaker_boost": True,
+                        "stability": float(self._config.get("stability", 0.5)),
+                        "similarity_boost": float(self._config.get("similarityBoost", 0.8)),
+                        "style": float(self._config.get("style", 0.0)),
+                        "use_speaker_boost": bool(self._config.get("useSpeakerBoost", True)),
                     },
                 },
             )

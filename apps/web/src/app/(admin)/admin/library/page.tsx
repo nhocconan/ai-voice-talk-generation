@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { VoiceLibraryManager } from "@/components/features/admin/VoiceLibraryManager"
 
 export const metadata: Metadata = { title: "Admin — Voice Library" }
 
@@ -8,9 +9,10 @@ export default function AdminLibraryPage() {
       <div>
         <h1 className="text-display-card">Voice Library</h1>
         <p className="mt-1 text-body text-[var(--color-text-secondary)]">
-          Org-shared voice library tools land here. The route is live so admin navigation stays intact.
+          Manage org-shared profiles and lock/unlock voice profiles across the organization.
         </p>
       </div>
+      <VoiceLibraryManager />
     </div>
   )
 }

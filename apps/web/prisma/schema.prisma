@@ -1,4 +1,4 @@
-// YouNet Voice Studio — Prisma Schema v1
+// YouNet Voice Studio — Prisma Schema v2
 // See docs/ARCHITECTURE.md for design rationale
 
 generator client {
@@ -8,6 +8,40 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Workspaces (P4-06 — multi-tenant isolation)
+// ---------------------------------------------------------------------------
+
+model Workspace {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  plan      String   @default("free") // free | pro | enterprise
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members     WorkspaceMember[]
+  invites     Invite[]
+  profiles    VoiceProfile[]
+  generations Generation[]
+  apiKeys     ApiKey[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        Role      @default(USER)
+  joinedAt    DateTime  @default(now())
+
+  @@unique([workspaceId, userId])
+  @@map("workspace_members")
 }
 
 // ---------------------------------------------------------------------------
@@ -34,27 +68,52 @@ model User {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  profiles       VoiceProfile[]
-  generations    Generation[]
-  invitesCreated Invite[]       @relation("InviteCreator")
-  auditLogs      AuditLog[]     @relation("AuditActor")
+  profiles        VoiceProfile[]
+  generations     Generation[]
+  invitesCreated  Invite[]          @relation("InviteCreator")
+  auditLogs       AuditLog[]        @relation("AuditActor")
+  workspaceMember WorkspaceMember[]
+  apiKeys         ApiKey[]
 
   @@map("users")
 }
 
 model Invite {
-  id          String    @id @default(cuid())
+  id          String     @id @default(cuid())
   email       String
-  tokenHash   String    @unique
-  role        Role      @default(USER)
+  tokenHash   String     @unique
+  role        Role       @default(USER)
   expiresAt   DateTime
   acceptedAt  DateTime?
   createdById String
-  createdBy   User      @relation("InviteCreator", fields: [createdById], references: [id])
-  createdAt   DateTime  @default(now())
+  createdBy   User       @relation("InviteCreator", fields: [createdById], references: [id])
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id])
+  createdAt   DateTime   @default(now())
 
   @@index([email])
   @@map("invites")
+}
+
+// ---------------------------------------------------------------------------
+// API Keys (P4-05 — REST API access)
+// ---------------------------------------------------------------------------
+
+model ApiKey {
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id])
+  name        String
+  keyHash     String     @unique
+  prefix      String // first 8 chars shown in UI
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime   @default(now())
+
+  @@index([userId])
+  @@map("api_keys")
 }
 
 // ---------------------------------------------------------------------------
@@ -62,22 +121,25 @@ model Invite {
 // ---------------------------------------------------------------------------
 
 model VoiceProfile {
-  id            String   @id @default(cuid())
+  id            String     @id @default(cuid())
   ownerId       String
-  owner         User     @relation(fields: [ownerId], references: [id])
+  owner         User       @relation(fields: [ownerId], references: [id])
+  workspaceId   String?
+  workspace     Workspace? @relation(fields: [workspaceId], references: [id])
   name          String
-  lang          String   @default("vi")
-  isOrgShared   Boolean  @default(false)
-  isLocked      Boolean  @default(false)
-  activeVersion Int      @default(1)
+  lang          String     @default("vi")
+  isOrgShared   Boolean    @default(false)
+  isLocked      Boolean    @default(false)
+  activeVersion Int        @default(1)
   consent       Json
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   samples            VoiceSample[]
   generationSpeakers GenerationSpeaker[]
 
   @@index([ownerId])
+  @@index([workspaceId])
   @@map("voice_profiles")
 }
 
@@ -103,10 +165,15 @@ model VoiceSample {
 // ---------------------------------------------------------------------------
 
 enum ProviderName {
+  VIENEU_TTS
+  VOXCPM2
   XTTS_V2
   F5_TTS
   ELEVENLABS
   GEMINI_TTS
+  VIBEVOICE
+  XIAOMI_TTS
+  XAI_TTS
 }
 
 model ProviderConfig {
@@ -143,14 +210,16 @@ enum GenStatus {
 }
 
 model Generation {
-  id             String     @id @default(cuid())
+  id             String         @id @default(cuid())
   userId         String
-  user           User       @relation(fields: [userId], references: [id])
+  user           User           @relation(fields: [userId], references: [id])
+  workspaceId    String?
+  workspace      Workspace?     @relation(fields: [workspaceId], references: [id])
   kind           GenKind
-  status         GenStatus  @default(QUEUED)
+  status         GenStatus      @default(QUEUED)
   providerId     String
   provider       ProviderConfig @relation(fields: [providerId], references: [id])
-  inputScript    String?    @db.Text
+  inputScript    String?        @db.Text
   sourceAudioKey String?
   outputMp3Key   String?
   outputWavKey   String?
@@ -158,7 +227,9 @@ model Generation {
   chapters       Json?
   costCents      Int?
   errorMessage   String?
-  createdAt      DateTime   @default(now())
+  shareToken     String?        @unique
+  shareExpiresAt DateTime?
+  createdAt      DateTime       @default(now())
   startedAt      DateTime?
   finishedAt     DateTime?
 
@@ -166,6 +237,7 @@ model Generation {
 
   @@index([userId, createdAt])
   @@index([status])
+  @@index([shareToken])
   @@map("generations")
 }
 
@@ -207,4 +279,20 @@ model Setting {
   updatedAt DateTime @updatedAt
 
   @@map("settings")
+}
+
+// ---------------------------------------------------------------------------
+// Password Reset (FR-1)
+// ---------------------------------------------------------------------------
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  email     String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([email])
+  @@map("password_reset_tokens")
 }

@@ -44,9 +44,9 @@
 │                                                              │
 │  TTS providers (pluggable, one interface)                    │
 │   ┌──────────────┬──────────────┬──────────────┬──────────┐  │
-│   │ XTTSProvider │ F5Provider   │ ElevenLabs   │ GeminiTTS│  │
-│   │ (coqui-tts,  │ (F5-TTS,     │ (REST)       │ (REST)   │  │
-│   │  PyTorch MPS)│  PyTorch MPS)│              │          │  │
+│   │ VieNeu-TTS   │ VoxCPM2      │ XTTS / F5    │ Cloud    │  │
+│   │ (SDK, local  │ (Python API, │ (compat      │ fallback │  │
+│   │  or remote)  │  future GPU) │  providers)  │          │  │
 │   └──────────────┴──────────────┴──────────────┴──────────┘  │
 │                                                              │
 │  Render pipeline                                             │
@@ -164,11 +164,11 @@ model ProviderConfig {
   apiKeyEnc  String?                          // sealed-box ciphertext (cloud only)
   enabled    Boolean  @default(true)
   isDefault  Boolean  @default(false)
-  config     Json                             // { model, endpoint, region, ... }
+  config     Json                             // { model, mode, device, apiBase, maxChunkChars, cfgValue, ... }
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
-enum ProviderName { XTTS_V2 F5_TTS ELEVENLABS GEMINI_TTS }
+enum ProviderName { VIENEU_TTS VOXCPM2 XTTS_V2 F5_TTS ELEVENLABS GEMINI_TTS VIBEVOICE }
 
 // Generations
 model Generation {
@@ -234,7 +234,7 @@ model Setting {
 retention.renderDays        = 90
 quota.defaultMinutes        = 60
 generation.maxMinutes       = 60
-provider.defaultId          = <cuid of XTTS_V2 config>
+provider.defaultId          = <cuid of the admin-selected default provider>
 branding.accentHex          = "#E5001A"        // YouNet red (confirm)
 feature.orgSharedLibrary    = true
 feature.publicShareLinks    = false
@@ -260,7 +260,7 @@ class TTSProvider(Protocol):
     async def close(self) -> None: ...
 ```
 
-Implementations: `XTTSProvider`, `F5Provider`, `ElevenLabsProvider`, `GeminiTTSProvider`. Each declares its capabilities; the router refuses if the request violates them (e.g., XTTS asked to do Japanese).
+Implementations now include `VieNeuProvider`, `VoxCPM2Provider`, `XTTSProvider`, `F5Provider`, `ElevenLabsProvider`, and `GeminiTTSProvider`. Each reads runtime settings from `provider_configs.config`, so the admin UI can change model, device, mode, or cloning options without code edits. The `/admin/providers` screen exposes provider docs links, setup steps, runtime config fields, and a live `Test` action backed by the worker `/provider-test` endpoint.
 
 ## 5. Job Contracts
 
@@ -333,12 +333,14 @@ Routes under `/admin`. SUPER_ADMIN sees all; ADMIN sees all except provider API 
 | Route | Function |
 |---|---|
 | `/admin/users` | List, invite, edit role, set quota, deactivate |
-| `/admin/providers` | List, add/edit config (API keys masked), toggle default |
-| `/admin/voice-library` | Browse all profiles, mark shared, lock, delete |
+| `/admin/providers` | List, add/edit config, follow provider docs, test, enable, toggle default |
+| `/admin/library` | Browse all profiles, mark shared, lock, delete |
 | `/admin/generations` | Browse, replay, delete, export CSV |
-| `/admin/storage` | Bucket sizes, list large objects, purge by age |
 | `/admin/audit` | Filterable audit log |
 | `/admin/settings` | Retention days, default quota, accent color, max length |
+| `/admin/system-health` | Probe infra services and provider readiness |
+| `/admin/help` | Render the repository administrator manual in-app |
+| `/admin/workspaces` | Workspace isolation controls for the future multi-tenant lane |
 
 ## 10. Deployment Topology
 
@@ -362,3 +364,4 @@ Routes under `/admin`. SUPER_ADMIN sees all; ADMIN sees all except provider API 
 
 ## Changelog
 - 2026-04-19: v1.0 initial architecture.
+- 2026-04-20: Updated the provider architecture for VieNeu-TTS and VoxCPM2, and documented the live provider configuration flow in `/admin/providers`.

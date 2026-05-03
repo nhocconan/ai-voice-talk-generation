@@ -10,6 +10,7 @@ Every task, regardless of type, must satisfy:
 - [ ] **D2. Types compile with zero errors.** (`tsc --noEmit` for TS; `mypy --strict` for Python.)
 - [ ] **D3. Lint is clean.** (`pnpm lint` for web; `ruff check` + `mypy` for worker.)
 - [ ] **D4. Tests pass locally AND in CI.** Unit tests for new logic, integration test if it crosses a boundary (DB, queue, provider).
+- [ ] **D4a. Required GitHub Actions checks are green on the branch or PR before merge.** A local pass is not enough if CI is still red.
 - [ ] **D5. Coverage not regressed.** Project floor: 70% lines on changed files. New code ≥ 80%.
 - [ ] **D6. Manual smoke test completed** on the feature's happy path + one edge case. Steps listed in PR body.
 - [ ] **D7. Docs updated in the same PR.** PRD, ARCHITECTURE, TECH_STACK, CODING_GUIDELINES — whichever is affected. If nothing is affected, say so in the PR.
@@ -56,6 +57,7 @@ Every task, regardless of type, must satisfy:
 ### E) Infra / CI / deployment
 - [ ] Runs locally via `docker compose up` with no manual steps beyond `.env` copy.
 - [ ] CI job green on a fresh clone.
+- [ ] GitHub workflow definitions do not fight repo package managers or tool versions.
 - [ ] Rollback procedure documented.
 - [ ] Backup job still works (if applicable).
 - [ ] Secrets not committed; verified with `gitleaks` or equivalent in CI.
@@ -105,3 +107,4 @@ The author marks their own DoD checklist in the PR description. The reviewer ver
 
 ## Changelog
 - 2026-04-19: v1.0 initial DoD.
+- 2026-04-20: Added mandatory green GitHub Actions checks and workflow/toolchain consistency checks before merge.

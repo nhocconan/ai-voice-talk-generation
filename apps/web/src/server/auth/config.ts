@@ -89,6 +89,7 @@ export const authConfig: NextAuthConfig = {
         "/generate",
         "/history",
         "/change-password",
+        "/settings",
       ].some((prefix) => nextUrl.pathname === prefix || nextUrl.pathname.startsWith(`${prefix}/`))
       const isAdminPath = nextUrl.pathname.startsWith("/admin")
       const isLoginPage = nextUrl.pathname === "/login"

@@ -10,6 +10,22 @@ export interface ProviderCapability {
 }
 
 export const PROVIDER_CAPABILITIES: Record<string, ProviderCapability> = {
+  VIENEU_TTS: {
+    name: "VieNeu-TTS",
+    supportsVoiceClone: true,
+    supportedLanguages: ["vi", "en"],
+    maxChunkChars: 320,
+    requiresApiKey: false,
+    requiresGpu: false,
+  },
+  VOXCPM2: {
+    name: "VoxCPM2",
+    supportsVoiceClone: true,
+    supportedLanguages: ["vi", "en", "zh", "fr", "de", "es", "pt", "ja", "ko", "th", "id", "ms"],
+    maxChunkChars: 260,
+    requiresApiKey: false,
+    requiresGpu: false,
+  },
   XTTS_V2: {
     name: "XTTS v2",
     supportsVoiceClone: true,

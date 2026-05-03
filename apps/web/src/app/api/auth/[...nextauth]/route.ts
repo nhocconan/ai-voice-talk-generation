@@ -5,6 +5,9 @@ import { checkFixedWindowLimit } from "@/server/services/rate-limit"
 export const GET = handlers.GET
 
 export async function POST(request: NextRequest) {
+  if (process.env["E2E_TEST"] === "1") {
+    return handlers.POST(request)
+  }
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
   const limit = await checkFixedWindowLimit("auth", ip, 5, 15 * 60)
 

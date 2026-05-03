@@ -1,0 +1,62 @@
+# GPU overlay for production deployment with NVIDIA CUDA.
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#
+# Prerequisites:
+#   - NVIDIA GPU with CUDA 12.x driver
+#   - nvidia-container-toolkit installed on host
+#   - Docker runtime set to nvidia (see docs/DEPLOYMENT.md)
+
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: infra/docker/worker.Dockerfile
+      target: cuda
+      args:
+        WORKER_EXTRAS: "--extra voxcpm"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      TORCH_DEVICE: cuda
+      CUDA_VISIBLE_DEVICES: "0"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/docker/web.Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    env_file: .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

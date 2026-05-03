@@ -22,6 +22,9 @@ logger = get_logger("pipeline.render")
 SAMPLE_RATE = 24000
 
 
+ChapterEntry = dict  # {title: str, start_ms: int, end_ms: int}
+
+
 async def run_render(
     *,
     generation_id: str,
@@ -54,6 +57,8 @@ async def run_render(
 
         await progress_fn(generation_id, 0.05, "Voice references prepared")
 
+        chapters: list[ChapterEntry] = []
+
         if kind == "PRESENTATION":
             output_wav = await _render_presentation(
                 tmp_dir=tmp_dir,
@@ -62,15 +67,17 @@ async def run_render(
                 provider=provider,
                 progress_fn=progress_fn,
                 generation_id=generation_id,
+                pacing_lock=pacing_lock,
             )
         else:
-            output_wav = await _render_podcast(
+            output_wav, chapters = await _render_podcast(
                 tmp_dir=tmp_dir,
                 speakers=speakers,
                 voice_refs=voice_refs,
                 provider=provider,
                 progress_fn=progress_fn,
                 generation_id=generation_id,
+                pacing_lock=pacing_lock,
             )
 
         await progress_fn(generation_id, 0.85, "Encoding output files")
@@ -80,6 +87,9 @@ async def run_render(
         if output.get("mp3"):
             mp3_path = tmp_dir / "output.mp3"
             await encode_mp3(output_wav, mp3_path)
+            _tag_mp3_watermark(mp3_path, generation_id)
+            if output.get("chapters") and chapters:
+                _write_id3_chapters(mp3_path, chapters)
             mp3_key = f"renders/{generation_id}/output.mp3"
             await asyncio.to_thread(upload_object, mp3_path, mp3_key, "audio/mpeg")
 
@@ -109,6 +119,7 @@ async def _render_presentation(
     provider: TTSProvider,
     progress_fn,
     generation_id: str,
+    pacing_lock: bool = False,
 ) -> Path:
     script: str = speaker.get("script") or "\n".join(
         seg["text"] for seg in speaker.get("segments", [])
@@ -141,7 +152,8 @@ async def _render_podcast(
     provider: TTSProvider,
     progress_fn,
     generation_id: str,
-) -> Path:
+    pacing_lock: bool = False,
+) -> tuple[Path, list[ChapterEntry]]:
     # Collect and sort all segments by startMs
     all_segments: list[dict] = []
     for spk in speakers:
@@ -158,6 +170,12 @@ async def _render_podcast(
         lang = seg.get("lang", "vi")
         voice_ref = voice_refs.get(label, VoiceRef("", {}))
 
+        # FR-9: pacing lock — rephrase segment via Gemini to fit original duration
+        if pacing_lock:
+            original_ms = seg.get("endMs", 0) - seg.get("startMs", 0)
+            if original_ms > 0:
+                text = await _rephrase_for_pacing(text, original_ms, lang)
+
         progress = 0.1 + (i / total) * 0.7
         await progress_fn(generation_id, progress, f"Speaker {label}: segment {i + 1}/{total}")
 
@@ -168,7 +186,10 @@ async def _render_podcast(
 
     output = tmp_dir / "stitched.wav"
     stitch_segments(segment_wavs, output)
-    return output
+
+    # Build chapter markers from per-segment durations
+    chapters = _build_chapters(segment_wavs, all_segments)
+    return output, chapters
 
 
 def _chunk_text(text: str, max_chars: int, lang: str = "vi") -> list[str]:
@@ -202,6 +223,122 @@ def _chunk_text(text: str, max_chars: int, lang: str = "vi") -> list[str]:
     if current:
         chunks.append(current)
     return [c for c in chunks if c.strip()]
+
+
+def _get_wav_duration_ms(path: Path) -> int:
+    """Return duration of a WAV file in milliseconds."""
+    data, sr = sf.read(str(path), dtype="float32")
+    return int(len(data) / sr * 1000)
+
+
+def _build_chapters(segment_wavs: list[Path], all_segments: list[dict]) -> list[ChapterEntry]:
+    """Compute chapter start/end times from rendered segment WAV durations."""
+    CROSSFADE_MS = 80
+    chapters: list[ChapterEntry] = []
+    cursor_ms = 0
+
+    for i, (wav_path, seg) in enumerate(zip(segment_wavs, all_segments)):
+        duration_ms = _get_wav_duration_ms(wav_path)
+        label = seg.get("label", "A")
+        text_preview = seg.get("text", "")[:60]
+        start_ms = cursor_ms
+        end_ms = cursor_ms + duration_ms
+        chapters.append({"title": f"[{label}] {text_preview}", "start_ms": start_ms, "end_ms": end_ms})
+        # Next segment starts after crossfade overlap
+        cursor_ms += max(0, duration_ms - CROSSFADE_MS)
+
+    return chapters
+
+
+def _write_id3_chapters(mp3_path: Path, chapters: list[ChapterEntry]) -> None:
+    """Write ID3 CTOC + CHAP frames for podcast navigation."""
+    try:
+        from mutagen.id3 import (  # type: ignore[import]
+            ID3, CHAP, CTOC, TIT2, CTOCFlags
+        )
+
+        tags = ID3(str(mp3_path))
+
+        chap_ids = []
+        for i, ch in enumerate(chapters):
+            chap_id = f"ch{i}"
+            chap_ids.append(chap_id)
+            tags.add(CHAP(
+                element_id=chap_id,
+                start_time=ch["start_ms"],
+                end_time=ch["end_ms"],
+                start_offset=0xFFFFFFFF,
+                end_offset=0xFFFFFFFF,
+                sub_frames=[TIT2(encoding=3, text=ch["title"])],
+            ))
+
+        tags.add(CTOC(
+            element_id="toc",
+            flags=CTOCFlags.TOP_LEVEL | CTOCFlags.ORDERED,
+            child_element_ids=chap_ids,
+            sub_frames=[TIT2(encoding=3, text="Table of Contents")],
+        ))
+
+        tags.save()
+        logger.info("ID3 chapters written", count=len(chapters))
+    except Exception as exc:
+        logger.warning("ID3 chapter write failed", exc=str(exc))
+
+
+def _tag_mp3_watermark(mp3_path: Path, generation_id: str) -> None:
+    """Write ID3 TXXX:watermark tag with generation ID for abuse traceability."""
+    try:
+        from mutagen.id3 import ID3, TXXX  # type: ignore[import]
+
+        tags = ID3(str(mp3_path))
+        tags.add(TXXX(encoding=3, desc="watermark", text=generation_id))
+        tags.save()
+    except Exception as exc:
+        logger.warning("ID3 watermark failed", exc=str(exc))
+
+
+async def _rephrase_for_pacing(text: str, target_ms: int, lang: str) -> str:
+    """FR-9: Call Gemini to rephrase text to fit within ±5% of target_ms when spoken."""
+    import os
+
+    api_key = os.environ.get("GOOGLE_API_KEY", "")
+    if not api_key:
+        return text  # Skip silently if not configured
+
+    target_words = int(target_ms / 1000 * 150 / 60)  # 150 wpm
+    min_words = int(target_words * 0.95)
+    max_words = int(target_words * 1.05)
+
+    prompt = (
+        f"Rewrite the following text so that when read aloud at normal speaking pace it takes "
+        f"approximately {target_ms // 1000} seconds ({min_words}–{max_words} words). "
+        f"Preserve the meaning and tone. Return only the rewritten text.\n\nOriginal:\n{text}"
+        if lang == "en"
+        else f"Viết lại đoạn văn sau để khi đọc to mất khoảng {target_ms // 1000} giây "
+        f"({min_words}–{max_words} từ). Giữ nguyên ý nghĩa và giọng điệu. Chỉ trả về văn bản đã viết lại.\n\nGốc:\n{text}"
+    )
+
+    try:
+        import urllib.request
+        import json as _json
+
+        body = _json.dumps({
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.4, "maxOutputTokens": 1024},
+        }).encode()
+        req = urllib.request.Request(
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
+            data = _json.loads(resp.read())
+        rephrased = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        return rephrased if rephrased else text
+    except Exception as exc:
+        logger.warning("Pacing lock Gemini call failed", exc=str(exc))
+        return text
 
 
 def _simple_sentence_split(text: str) -> list[str]:

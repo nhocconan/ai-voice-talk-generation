@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { trpc } from "@/lib/trpc/client"
 
 const STATUS_LABELS: Record<string, string> = {
@@ -11,11 +12,21 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 export function GenerationDetail({ generationId }: { generationId: string }) {
+  const [shareLink, setShareLink] = useState<string | null>(null)
   const { data: generation, isLoading } = trpc.generation.get.useQuery({ id: generationId })
   const { data: downloads } = trpc.generation.getDownloadUrls.useQuery(
     { id: generationId },
     { enabled: generation?.status === "DONE" },
   )
+  const createShareLink = trpc.generation.createShareLink.useMutation({
+    onSuccess: ({ shareToken }) => {
+      const url = `${window.location.origin}/share/${shareToken}`
+      setShareLink(url)
+    },
+  })
+  const revokeShareLink = trpc.generation.revokeShareLink.useMutation({
+    onSuccess: () => setShareLink(null),
+  })
 
   if (isLoading || !generation) {
     return (
@@ -92,7 +103,46 @@ export function GenerationDetail({ generationId }: { generationId: string }) {
             Download WAV
           </a>
         ) : null}
+        {generation.status === "DONE" && !shareLink && (
+          <button
+            onClick={() => createShareLink.mutate({ id: generationId })}
+            disabled={createShareLink.isPending}
+            className="rounded-[var(--radius-pill)] border border-[var(--color-border)] px-5 py-2 text-button hover:bg-[var(--color-surface-1)] disabled:opacity-50"
+          >
+            {createShareLink.isPending ? "Creating link…" : "Share"}
+          </button>
+        )}
+        {createShareLink.error && (
+          <p className="text-micro text-[var(--color-danger)]">{createShareLink.error.message}</p>
+        )}
       </div>
+
+      {shareLink && (
+        <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 space-y-2">
+          <p className="text-caption text-[var(--color-text-muted)]">Share link (7 days)</p>
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              value={shareLink}
+              className="flex-1 px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui text-sm bg-[var(--color-surface-1)]"
+              onFocus={(e) => e.target.select()}
+            />
+            <button
+              onClick={() => navigator.clipboard.writeText(shareLink)}
+              className="px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-caption hover:bg-[var(--color-surface-2)]"
+            >
+              Copy
+            </button>
+          </div>
+          <button
+            onClick={() => revokeShareLink.mutate({ id: generationId })}
+            disabled={revokeShareLink.isPending}
+            className="text-micro text-[var(--color-danger)] hover:underline disabled:opacity-50"
+          >
+            Revoke link
+          </button>
+        </div>
+      )}
     </div>
   )
 }

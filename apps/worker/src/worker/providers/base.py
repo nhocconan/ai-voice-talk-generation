@@ -30,6 +30,7 @@ class TTSProvider(Protocol):
         voice: VoiceRef,
         lang: str,
         speed: float = 1.0,
+        style: str | None = None,
     ) -> AudioBytes:
         """Return raw wav/pcm bytes at the provider's native sample rate."""
         ...

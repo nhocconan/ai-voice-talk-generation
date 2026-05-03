@@ -1,6 +1,6 @@
 # Product Requirements Document — YouNet Voice Studio
 
-**Status:** Draft v1.0 · **Owner:** Product/Engineering · **Last updated:** 2026-04-19
+**Status:** Draft v1.1 · **Owner:** Product/Engineering · **Last updated:** 2026-04-20
 
 ## 1. Problem & Vision
 
@@ -23,7 +23,7 @@ YouNet leadership produces internal presentations, podcasts, and announcements i
 - Enroll a voice profile from 30–60s of reference audio (guided or upload), with multi-sample versioning.
 - Generate single-speaker presentations up to 60 minutes, Vietnamese or English.
 - Generate two-speaker podcasts from a timed script OR by re-voicing an uploaded podcast.
-- Support pluggable TTS providers: local (XTTS-v2, F5-TTS) + cloud (ElevenLabs, Gemini TTS). Super Admin configures active provider.
+- Support pluggable TTS providers: local-first (`VieNeu-TTS`, `VoxCPM2`, `XTTS-v2`, `F5-TTS`) + cloud (`ElevenLabs`, `Gemini TTS`). Super Admin configures active provider.
 - Invite-only authentication. Default super admin seeded: `admin@younetgroup.com` / `YouNet@2026`.
 - Full Admin Control Panel with CRUD over users, providers, voice library, generations, storage, retention, audit log.
 - Output MP3 + WAV with ID3 chapter markers for podcasts.
@@ -99,7 +99,7 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md#admin-cp) for surface list. Invite user 
 | FR-7 | Two-speaker podcast render from timed script | Must |
 | FR-8 | ASR + diarization of uploaded audio | Must |
 | FR-9 | Re-voice preserving original timing (±5%) | Must |
-| FR-10 | TTS provider adapters: XTTS-v2, F5-TTS, ElevenLabs, Gemini TTS | Must |
+| FR-10 | TTS provider adapters: VieNeu-TTS, VoxCPM2, XTTS-v2, F5-TTS, ElevenLabs, Gemini TTS | Must |
 | FR-11 | Super Admin configures active provider + per-role overrides + API keys (encrypted at rest) | Must |
 | FR-12 | Admin CP: users, providers, profiles, generations, storage, retention, audit log, settings | Must |
 | FR-13 | MP3 + WAV output; ID3 chapter markers for podcasts | Must |
@@ -135,7 +135,8 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md#admin-cp) for surface list. Invite user 
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| XTTS-v2 Vietnamese quality insufficient | M | H | Ship with ElevenLabs fallback; admin toggles per generation |
+| VieNeu-TTS local quality varies by runtime mode | M | H | Keep `XTTS-v2` + `F5-TTS` as local fallbacks and `ElevenLabs` as paid fallback |
+| VoxCPM2 Apple-Silicon performance insufficient | M | M | Treat `VoxCPM2` as opt-in quality lane on Mac; promote to main path only after benchmark pass |
 | Apple-Silicon inference too slow for 60-min outputs | M | M | Chunk + queue; surface ETA; fall back to cloud provider if exceeds threshold |
 | Voice-cloning abuse (deepfakes) | M | H | Invite-only, audit log, profile lock, consent on enrollment, watermark audio metadata |
 | Provider API cost overrun | M | M | Per-user quota, provider kill-switch, cost dashboard in Admin CP |
@@ -146,10 +147,10 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md#admin-cp) for surface list. Invite user 
 
 See [TASKS.md](./TASKS.md) for the phased task breakdown with acceptance criteria. High-level:
 
-- **Phase 1 — Foundation** (weeks 1–2): Auth, Admin CP shell, XTTS-v2 single-speaker path, design system.
+- **Phase 1 — Foundation** (weeks 1–2): Auth, Admin CP shell, VieNeu-TTS single-speaker path, design system.
 - **Phase 2 — Podcast** (week 3): Two-speaker, ASR+diarization, ElevenLabs + Gemini TTS adapters, chapter markers.
 - **Phase 3 — Polish** (week 4): Gemini script drafting, pacing, quotas, audit, retention, quality score UX.
-- **Phase 4 — Scale** (post-launch): Linux+GPU worker, F5-TTS, org-shared library, API for other YouNet tools.
+- **Phase 4 — Scale** (post-launch): Linux+GPU worker, VoxCPM2 promotion path, org-shared library, API for other YouNet tools.
 
 ## 11. Open Questions
 
@@ -163,3 +164,4 @@ Track new questions here; close with a decision + PR link.
 
 ## Changelog
 - 2026-04-19: v1.0 initial draft.
+- 2026-04-20: Refreshed the provider strategy around VieNeu-TTS as the main Mac-first lane and VoxCPM2 as the advanced-quality lane.
