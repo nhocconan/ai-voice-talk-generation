@@ -227,10 +227,16 @@ async def _get_provider_for_generation(provider_id: str):
     if not row:
         raise ValueError(f"Provider {provider_id} not found")
 
+    raw_config = row["config"]
+    if isinstance(raw_config, (str, bytes, bytearray)):
+        parsed_config = json.loads(raw_config)
+    else:
+        parsed_config = raw_config or {}
+
     return get_provider(
         row["name"],
         api_key_enc=row["apiKeyEnc"],
-        config=json.loads(row["config"]) if row["config"] else {},
+        config=parsed_config,
     )
 
 

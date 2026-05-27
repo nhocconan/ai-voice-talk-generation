@@ -105,8 +105,11 @@ async def render_audiogram(
     bg = background_hex.lstrip("#")
     wv = wave_hex.lstrip("#")
     caption_chain = _subtitle_filter_chain(ass_path)
+    # `color` without an explicit duration produces frames indefinitely; the
+    # `-shortest` flag at output time bounds it to the audio length. An
+    # earlier `d=1` here capped the whole video at 1 second.
     filter_complex = (
-        f"color=c=0x{bg}:s={size}x{size}:d=1[bg];"
+        f"color=c=0x{bg}:s={size}x{size}:r=30[bg];"
         f"[0:a]showwaves=s={size}x{size // 3}:mode=cline:colors=0x{wv}:rate=30,"
         f"format=rgba[wave];"
         f"[bg][wave]overlay=0:{size - size // 3 - 80}:shortest=1[wbg]"

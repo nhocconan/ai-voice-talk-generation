@@ -106,3 +106,56 @@ def test_render_audiogram_smoke(tmp_path) -> None:
     )
     assert out.exists()
     assert out.stat().st_size > 1024
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
+def test_render_audiogram_matches_audio_duration(tmp_path) -> None:
+    """Regression: the output MP4 must span the full audio, not stop after 1s.
+
+    Earlier the filtergraph fixed the background `color` source to `d=1`, which
+    -- combined with `-shortest` at output -- truncated every audiogram to one
+    second regardless of audio length. Verified end-to-end with real Xiaomi
+    MiMo output during 2026-05-27 live integration.
+    """
+    import asyncio
+    import subprocess
+
+    from worker.audio.audiogram import render_audiogram
+
+    audio = tmp_path / "tone.wav"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=5",
+            str(audio),
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+    out = tmp_path / "audiogram_5s.mp4"
+    asyncio.run(render_audiogram(audio_path=audio, out_path=out, segments=[]))
+
+    probe = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(out),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    duration = float(probe.stdout.strip())
+    # Audio is 5s; allow a small encoder rounding margin but reject the 1s bug.
+    assert duration >= 4.5, f"Audiogram duration {duration}s — regression of d=1 bug?"
+    assert duration <= 6.0, f"Audiogram unexpectedly long: {duration}s"
