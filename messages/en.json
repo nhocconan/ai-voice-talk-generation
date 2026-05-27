@@ -127,7 +127,16 @@
     "quotaExceeded": "You have exceeded your quota. Contact admin to increase.",
     "presentationDesc": "Generate audio from a script with a single voice",
     "podcastDesc": "Generate a podcast with 2 alternating speakers",
-    "revoiceDesc": "Replace voices in existing audio with cloned voices"
+    "revoiceDesc": "Replace voices in existing audio with cloned voices",
+    "videoRevoice": "Re-voice Video",
+    "videoRevoiceDesc": "Replace the voices in a NotebookLM-style podcast video with your cloned voices, with optional burned-in captions",
+    "videoUpload": "Upload source video",
+    "videoUploadHint": "MP4 / MOV / WebM / MKV up to 1 GB",
+    "burnCaptions": "Burn captions into the output video",
+    "audiogram": "Generate audiogram",
+    "audiogramHint": "Square MP4 with waveform + transcript overlay, ready for social sharing",
+    "audiogramTitle": "Audiogram title",
+    "downloadVideo": "Download Video"
   },
   "history": {
     "title": "Generation History",
@@ -146,7 +155,9 @@
     "statusCancelled": "Cancelled",
     "kindPresentation": "Presentation",
     "kindPodcast": "Podcast",
-    "kindRevoice": "Re-voice"
+    "kindRevoice": "Re-voice",
+    "kindVideoRevoice": "Video Re-voice",
+    "kindAudiogram": "Audiogram"
   },
   "admin": {
     "title": "Admin Panel",
@@ -181,6 +192,16 @@
     "roleSuperAdmin": "Super Admin",
     "roleUser": "User",
     "quotaMinutes": "Quota (minutes)",
-    "usedMinutes": "Used (minutes)"
+    "usedMinutes": "Used (minutes)",
+    "models": "Models",
+    "modelCatalog": "Model Catalog",
+    "fetchLatestModels": "Fetch latest models",
+    "modelSynced": "{count} models synced ({source})",
+    "modelId": "Model ID",
+    "modelDisplayName": "Display name",
+    "modelKind": "Kind",
+    "modelLanguages": "Languages",
+    "modelDefault": "Default",
+    "modelLastSynced": "Last synced"
   }
 }

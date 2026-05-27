@@ -1,8 +1,9 @@
 import { z } from "zod"
 import { router, adminProcedure, superAdminProcedure } from "@/server/trpc"
-import { Prisma, Role } from "@prisma/client"
+import { ModelKind, Prisma, Role } from "@prisma/client"
 import { TRPCError } from "@trpc/server"
-import { encryptApiKey } from "@/server/services/crypto"
+import { encryptApiKey, decryptApiKey } from "@/server/services/crypto"
+import { fetchProviderCatalog } from "@/server/services/provider-models"
 
 const settingValueSchema = z.union([
   z.number().int().min(0),
@@ -162,6 +163,111 @@ export const adminRouter = router({
         targetType: "ProviderConfig",
         targetId: id,
         meta: { ...rest, apiKeyChanged: apiKey !== undefined } as Prisma.InputJsonValue,
+      })
+    }),
+
+  // Provider model catalog (P5-01 — administrators can pull the latest model
+  // list from each provider's API and edit/curate inline).
+  listProviderModels: adminProcedure
+    .input(z.object({ providerId: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.providerModel.findMany({
+        where: input.providerId ? { providerId: input.providerId } : {},
+        orderBy: [{ providerId: "asc" }, { isDefault: "desc" }, { modelId: "asc" }],
+        include: { provider: { select: { name: true } } },
+      })
+    }),
+
+  fetchProviderModels: superAdminProcedure
+    .input(z.object({ providerId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const provider = await ctx.db.providerConfig.findUniqueOrThrow({
+        where: { id: input.providerId },
+      })
+      const apiKey = provider.apiKeyEnc ? await decryptApiKey(provider.apiKeyEnc) : null
+      const result = await fetchProviderCatalog(provider.name, apiKey)
+
+      const now = new Date()
+      for (const m of result.models) {
+        await ctx.db.providerModel.upsert({
+          where: { providerId_modelId: { providerId: provider.id, modelId: m.modelId } },
+          create: {
+            providerId: provider.id,
+            modelId: m.modelId,
+            displayName: m.displayName,
+            kind: m.kind,
+            languages: m.languages,
+            meta: (m.meta ?? {}) as Prisma.InputJsonValue,
+            lastSyncedAt: now,
+          },
+          update: {
+            displayName: m.displayName,
+            kind: m.kind,
+            languages: m.languages,
+            meta: (m.meta ?? {}) as Prisma.InputJsonValue,
+            lastSyncedAt: now,
+          },
+        })
+      }
+
+      await ctx.audit({
+        actorId: ctx.session.user.id,
+        action: "admin.fetchProviderModels",
+        targetType: "ProviderConfig",
+        targetId: provider.id,
+        meta: { source: result.source, count: result.models.length },
+      })
+
+      return { count: result.models.length, source: result.source }
+    }),
+
+  updateProviderModel: superAdminProcedure
+    .input(z.object({
+      id: z.string(),
+      displayName: z.string().min(1).optional(),
+      kind: z.nativeEnum(ModelKind).optional(),
+      languages: z.array(z.string()).optional(),
+      enabled: z.boolean().optional(),
+      isDefault: z.boolean().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { id, isDefault, displayName, kind, languages, enabled } = input
+      const current = await ctx.db.providerModel.findUniqueOrThrow({ where: { id } })
+
+      if (isDefault) {
+        await ctx.db.providerModel.updateMany({
+          where: { providerId: current.providerId, id: { not: id } },
+          data: { isDefault: false },
+        })
+      }
+
+      const data: Prisma.ProviderModelUpdateInput = {}
+      if (displayName !== undefined) data.displayName = displayName
+      if (kind !== undefined) data.kind = kind
+      if (languages !== undefined) data.languages = languages
+      if (enabled !== undefined) data.enabled = enabled
+      if (isDefault !== undefined) data.isDefault = isDefault
+
+      await ctx.db.providerModel.update({ where: { id }, data })
+
+      await ctx.audit({
+        actorId: ctx.session.user.id,
+        action: "admin.updateProviderModel",
+        targetType: "ProviderModel",
+        targetId: id,
+        meta: input as Prisma.InputJsonValue,
+      })
+    }),
+
+  deleteProviderModel: superAdminProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.providerModel.delete({ where: { id: input.id } })
+      await ctx.audit({
+        actorId: ctx.session.user.id,
+        action: "admin.deleteProviderModel",
+        targetType: "ProviderModel",
+        targetId: input.id,
       })
     }),
 

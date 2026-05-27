@@ -1,11 +1,16 @@
 import Redis from "ioredis"
-import type { AsrJobData, IngestJobData, RenderJobData } from "@contracts/jobs"
+import type {
+  AsrJobData,
+  IngestJobData,
+  RenderJobData,
+  VideoRevoiceJobData,
+} from "@contracts/jobs"
 import { env } from "@/env"
 
 const redis = new Redis(env.REDIS_URL)
 
 async function enqueueStreamJob(
-  stream: "ingest" | "render" | "asr",
+  stream: "ingest" | "render" | "asr" | "video_revoice",
   jobName: string,
   data: object,
 ): Promise<string> {
@@ -22,4 +27,8 @@ export async function enqueueRenderJob(data: RenderJobData): Promise<string> {
 
 export async function enqueueAsrJob(data: AsrJobData): Promise<string> {
   return enqueueStreamJob("asr", "asr.diarize", data)
+}
+
+export async function enqueueVideoRevoiceJob(data: VideoRevoiceJobData): Promise<string> {
+  return enqueueStreamJob("video_revoice", "render.video_revoice", data)
 }

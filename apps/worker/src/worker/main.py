@@ -9,11 +9,12 @@ from fastapi import FastAPI
 from prometheus_client import Counter, Histogram, start_http_server
 
 from .config import settings
-from .job_payloads import AsrJobPayload, IngestJobPayload, RenderJobPayload
+from .job_payloads import AsrJobPayload, IngestJobPayload, RenderJobPayload, VideoRevoiceJobPayload
 from .logging import get_logger, setup_logging
 from .pipelines.asr import run_asr
 from .pipelines.ingest import run_ingest
 from .pipelines.render import run_render
+from .pipelines.video_revoice import run_video_revoice
 from .providers.registry import get_provider
 from .queue import QueueConsumer, publish_progress
 from .tracing import setup_tracing, span
@@ -146,6 +147,7 @@ async def _db_render_result(
     output_mp3_key: str | None,
     output_wav_key: str | None,
     duration_ms: int,
+    output_video_key: str | None = None,
 ) -> None:
     import os
 
@@ -158,10 +160,11 @@ async def _db_render_result(
                 """
                 UPDATE generations
                 SET status='DONE', "outputMp3Key"=%s, "outputWavKey"=%s,
+                    "outputVideoKey"=%s,
                     "durationMs"=%s, "finishedAt"=now()
                 WHERE id=%s
                 """,
-                (output_mp3_key, output_wav_key, duration_ms, generation_id),
+                (output_mp3_key, output_wav_key, output_video_key, duration_ms, generation_id),
             )
         conn.commit()
     finally:
@@ -172,6 +175,7 @@ async def _db_render_result(
         "generationId": generation_id,
         "durationMs": duration_ms,
         "mp3Key": output_mp3_key,
+        "videoKey": output_video_key,
     })
 
 
@@ -345,6 +349,7 @@ async def handle_render(job_name: str, data: object) -> None:
                 pacing_lock=data.pacing_lock,
                 progress_fn=progress,
                 result_fn=_db_render_result,
+                audiogram_title=data.audiogram_title,
             )
 
             RENDERS_TOTAL.labels(status="success", provider=provider_name).inc()
@@ -353,6 +358,56 @@ async def handle_render(job_name: str, data: object) -> None:
 
         except Exception as e:
             logger.error("Render failed", generation_id=generation_id, error=str(e))
+            RENDERS_TOTAL.labels(status="failed", provider=provider_name).inc()
+            await _db_render_failed(generation_id=generation_id, error=str(e))
+            await publish_progress(generation_id, "FAILED", 0.0, str(e))
+            raise
+
+
+async def handle_video_revoice(job_name: str, data: object) -> None:
+    if not isinstance(data, VideoRevoiceJobPayload):
+        raise TypeError(f"{job_name} expected VideoRevoiceJobPayload")
+
+    generation_id = data.generation_id
+    import os
+    import psycopg2
+
+    with span("render.video_revoice", {"generation_id": generation_id}):
+        provider_name = "unknown"
+        try:
+            provider = await _get_provider_for_generation(data.provider_id)
+            provider_name = provider.name
+
+            conn = psycopg2.connect(os.environ["DATABASE_URL"])
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE generations SET status='RUNNING', \"startedAt\"=now() WHERE id=%s",
+                    (generation_id,),
+                )
+            conn.commit()
+            conn.close()
+
+            speakers = await _get_speaker_sample_keys(
+                [s.model_dump(by_alias=True) for s in data.speakers]
+            )
+
+            async def progress(gid: str, pct: float, msg: str) -> None:
+                await publish_progress(gid, "CHUNK", pct, msg)
+
+            await run_video_revoice(
+                generation_id=generation_id,
+                provider=provider,
+                source_video_key=data.source_video_key,
+                speakers=speakers,
+                captions=data.captions,
+                progress_fn=progress,
+                result_fn=_db_render_result,
+            )
+
+            RENDERS_TOTAL.labels(status="success", provider=provider_name).inc()
+            await publish_progress(generation_id, "DONE", 1.0, "Generation complete")
+        except Exception as e:
+            logger.error("Video re-voice failed", generation_id=generation_id, error=str(e))
             RENDERS_TOTAL.labels(status="failed", provider=provider_name).inc()
             await _db_render_failed(generation_id=generation_id, error=str(e))
             await publish_progress(generation_id, "FAILED", 0.0, str(e))
@@ -373,10 +428,12 @@ async def lifespan(app: FastAPI):
         QueueConsumer("ingest", "workers", f"worker-ingest-{settings.torch_device}"),
         QueueConsumer("asr", "workers", f"worker-asr-{settings.torch_device}"),
         QueueConsumer("render", "workers", f"worker-render-{settings.torch_device}"),
+        QueueConsumer("video_revoice", "workers", f"worker-vrv-{settings.torch_device}"),
     ]
     consumers[0].register("ingest.enroll", handle_ingest, IngestJobPayload)
     consumers[1].register("asr.diarize", handle_asr, AsrJobPayload)
     consumers[2].register("render.generation", handle_render, RenderJobPayload)
+    consumers[3].register("render.video_revoice", handle_video_revoice, VideoRevoiceJobPayload)
 
     for c in consumers:
         await c.start()

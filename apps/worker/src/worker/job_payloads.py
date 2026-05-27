@@ -42,6 +42,7 @@ class RenderOutputPayload(WorkerPayload):
     mp3: bool = True
     wav: bool = True
     chapters: bool = False
+    audiogram: bool = False
 
 
 class RenderJobPayload(WorkerPayload):
@@ -51,3 +52,12 @@ class RenderJobPayload(WorkerPayload):
     speakers: list[RenderSpeakerPayload] = Field(default_factory=list)
     output: RenderOutputPayload = Field(default_factory=RenderOutputPayload)
     pacing_lock: bool = Field(default=False, alias="pacingLock")
+    audiogram_title: str | None = Field(default=None, alias="audiogramTitle")
+
+
+class VideoRevoiceJobPayload(WorkerPayload):
+    generation_id: str = Field(alias="generationId")
+    provider_id: str = Field(alias="providerId")
+    source_video_key: str = Field(alias="sourceVideoKey")
+    speakers: list[RenderSpeakerPayload] = Field(default_factory=list)
+    captions: bool = True

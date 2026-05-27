@@ -20,22 +20,25 @@ Demo leadership produces internal presentations, podcasts, and announcements in 
 ## 3. Goals & Non-Goals
 
 ### Goals (v1)
-- Enroll a voice profile from 30–60s of reference audio (guided or upload), with multi-sample versioning.
+- Enroll a voice profile from 30–60s of reference audio (guided in-browser recording or batch upload), with multi-sample versioning.
 - Generate single-speaker presentations up to 60 minutes, Vietnamese or English.
 - Generate two-speaker podcasts from a timed script OR by re-voicing an uploaded podcast.
-- Support pluggable TTS providers: local-first (`VieNeu-TTS`, `VoxCPM2`, `XTTS-v2`, `F5-TTS`) + cloud (`ElevenLabs`, `Gemini TTS`). Super Admin configures active provider.
+- **Mode A — Audiogram output.** Any audio generation can produce a square MP4 with live waveform + transcript text overlay, ready for social sharing.
+- **Mode B — Video re-voice.** Replace the voices in a NotebookLM-style podcast video (MP4/MOV/WebM/MKV) with cloned voices, preserving the original video frames and optionally burning captions.
+- Support pluggable TTS providers: local-first (`VieNeu-TTS`, `VoxCPM2`, `XTTS-v2`, `F5-TTS`, `VibeVoice`) + cloud (`ElevenLabs`, `Gemini TTS`, `Xiaomi MiMo TTS`, `xAI Grok TTS`). Super Admin configures active provider and can pull the latest model catalog from each provider's API.
 - Invite-only authentication. Default super admin seeded: `admin@demo.demo` / `Demo1234`.
-- Full Admin Control Panel with CRUD over users, providers, voice library, generations, storage, retention, audit log.
-- Output MP3 + WAV with ID3 chapter markers for podcasts.
+- Full Admin Control Panel with CRUD over users, providers, **model catalog**, voice library, generations, storage, retention, audit log.
+- Output MP3 + WAV with ID3 chapter markers for podcasts; MP4 for audiograms and video re-voice.
 - Brand: apply `DESIGN.md` (ElevenLabs-style) with a single Demo accent color.
 
 ### Non-Goals (v1, revisit later)
 - Real-time streaming voice (only batch generation).
-- Live voice conversion / dubbing of video.
+- Live (real-time) voice conversion. Batched, post-hoc video re-voice is in scope (Mode B); live dubbing is not.
 - Public self-signup or external-client multi-tenancy.
 - Mobile-native apps (responsive web is sufficient).
 - Emotion/style conditioning beyond neutral presentation/conversational tones.
 - Background-music mixing or full audio post-production.
+- Lip-sync correction in video re-voice — we replace audio while preserving the original frames; timing alignment relies on the supplied or ASR-derived transcript.
 
 ## 4. Success Metrics
 

@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import json
 
-from worker.job_payloads import AsrJobPayload, IngestJobPayload, RenderJobPayload
+from worker.job_payloads import (
+    AsrJobPayload,
+    IngestJobPayload,
+    RenderJobPayload,
+    VideoRevoiceJobPayload,
+)
 
 
 def _node_ingest_json() -> str:
@@ -119,6 +124,49 @@ def test_asr_payload_roundtrip() -> None:
     assert payload.generation_id == "clxxx0005genid"
     assert payload.source_key == "uploads/sources/userid/podcast.mp3"
     assert payload.expected_speakers == 2
+
+
+def test_render_audiogram_flag_roundtrip() -> None:
+    """Render payload accepts an opt-in audiogram flag and optional title."""
+    raw = json.dumps({
+        "generationId": "gen-aud",
+        "providerId": "prov-x",
+        "kind": "PRESENTATION",
+        "speakers": [{"label": "A", "profileId": "prof-x", "segments": [], "script": "hi"}],
+        "output": {"mp3": True, "wav": True, "chapters": False, "audiogram": True},
+        "pacingLock": False,
+        "audiogramTitle": "Weekly recap",
+    })
+    payload = RenderJobPayload.model_validate_json(raw)
+    assert payload.output.audiogram is True
+    assert payload.audiogram_title == "Weekly recap"
+
+
+def test_video_revoice_payload_roundtrip() -> None:
+    raw = json.dumps({
+        "generationId": "gen-vrv",
+        "providerId": "prov-x",
+        "sourceVideoKey": "uploads/videos/userid/abc.mp4",
+        "speakers": [
+            {
+                "label": "A",
+                "profileId": "prof-a",
+                "segments": [{"startMs": 0, "endMs": 4000, "text": "Hello"}],
+            },
+            {
+                "label": "B",
+                "profileId": "prof-b",
+                "segments": [{"startMs": 4000, "endMs": 8000, "text": "Hi back"}],
+            },
+        ],
+        "captions": True,
+    })
+    payload = VideoRevoiceJobPayload.model_validate_json(raw)
+    assert payload.generation_id == "gen-vrv"
+    assert payload.source_video_key == "uploads/videos/userid/abc.mp4"
+    assert payload.captions is True
+    assert len(payload.speakers) == 2
+    assert payload.speakers[0].segments[0].end_ms == 4000
 
 
 def test_unknown_fields_ignored() -> None:

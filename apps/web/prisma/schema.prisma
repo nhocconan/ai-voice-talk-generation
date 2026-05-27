@@ -187,8 +187,37 @@ model ProviderConfig {
   updatedAt DateTime     @updatedAt
 
   generations Generation[]
+  models      ProviderModel[]
 
   @@map("provider_configs")
+}
+
+enum ModelKind {
+  TTS
+  STT
+  LLM
+}
+
+// Catalog of models exposed by a provider. Populated by Admin → "Fetch latest models"
+// (calls each provider's list-models endpoint when one exists) or curated/edited inline.
+model ProviderModel {
+  id           String         @id @default(cuid())
+  providerId   String
+  provider     ProviderConfig @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  modelId      String
+  displayName  String
+  kind         ModelKind      @default(TTS)
+  languages    String[]       @default([])
+  enabled      Boolean        @default(true)
+  isDefault    Boolean        @default(false)
+  meta         Json           @default("{}")
+  lastSyncedAt DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@unique([providerId, modelId])
+  @@index([providerId, enabled])
+  @@map("provider_models")
 }
 
 // ---------------------------------------------------------------------------
@@ -199,6 +228,8 @@ enum GenKind {
   PRESENTATION
   PODCAST
   REVOICE
+  VIDEO_REVOICE
+  AUDIOGRAM
 }
 
 enum GenStatus {
@@ -221,8 +252,11 @@ model Generation {
   provider       ProviderConfig @relation(fields: [providerId], references: [id])
   inputScript    String?        @db.Text
   sourceAudioKey String?
+  sourceVideoKey String?
   outputMp3Key   String?
   outputWavKey   String?
+  outputVideoKey String?
+  audiogram      Boolean        @default(false)
   durationMs     Int?
   chapters       Json?
   costCents      Int?

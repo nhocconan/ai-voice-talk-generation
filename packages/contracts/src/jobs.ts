@@ -1,15 +1,29 @@
 // Job payload contracts shared between the web app and worker queue boundary.
 
-export type GenKind = "PRESENTATION" | "PODCAST" | "REVOICE";
+export type GenKind =
+  | "PRESENTATION"
+  | "PODCAST"
+  | "REVOICE"
+  | "VIDEO_REVOICE"
+  | "AUDIOGRAM";
 export type GenStatus = "QUEUED" | "RUNNING" | "DONE" | "FAILED" | "CANCELLED";
 
 export interface RenderJobData {
   generationId: string;
   providerId: string;
-  kind: GenKind;
+  kind: "PRESENTATION" | "PODCAST" | "REVOICE";
   speakers: RenderJobSpeaker[];
   output: RenderJobOutput;
   pacingLock: boolean;
+  audiogramTitle?: string;
+}
+
+export interface VideoRevoiceJobData {
+  generationId: string;
+  providerId: string;
+  sourceVideoKey: string;
+  speakers: RenderJobSpeaker[];
+  captions: boolean;
 }
 
 export interface RenderJobSpeaker {
@@ -29,6 +43,7 @@ export interface RenderJobOutput {
   mp3: boolean;
   wav: boolean;
   chapters: boolean;
+  audiogram?: boolean;
 }
 
 export interface IngestJobData {

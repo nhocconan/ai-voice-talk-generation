@@ -168,7 +168,27 @@ model ProviderConfig {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
-enum ProviderName { VIENEU_TTS VOXCPM2 XTTS_V2 F5_TTS ELEVENLABS GEMINI_TTS VIBEVOICE }
+enum ProviderName { VIENEU_TTS VOXCPM2 XTTS_V2 F5_TTS ELEVENLABS GEMINI_TTS VIBEVOICE XIAOMI_TTS XAI_TTS }
+
+// P5-01 — Catalog of models advertised by each provider. Populated by the
+// admin "Fetch latest models" action (calls each provider's list-models
+// endpoint when available) or seeded from a curated default list.
+model ProviderModel {
+  id            String         @id @default(cuid())
+  providerId    String
+  provider      ProviderConfig @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  modelId       String                             // provider-native model identifier
+  displayName   String
+  kind          ModelKind      @default(TTS)
+  languages     String[]       @default([])
+  enabled       Boolean        @default(true)
+  isDefault     Boolean        @default(false)
+  meta          Json           @default("{}")
+  lastSyncedAt  DateTime?
+  @@unique([providerId, modelId])
+  @@index([providerId, enabled])
+}
+enum ModelKind { TTS STT LLM }
 
 // Generations
 model Generation {
@@ -181,9 +201,12 @@ model Generation {
   provider        ProviderConfig @relation(fields: [providerId], references: [id])
 
   inputScript     String?                     // null when audio-source
-  sourceAudioKey  String?                     // MinIO key when re-voicing
+  sourceAudioKey  String?                     // MinIO key when re-voicing audio
+  sourceVideoKey  String?                     // MinIO key when re-voicing a NotebookLM-style video
   outputMp3Key    String?
   outputWavKey    String?
+  outputVideoKey  String?                     // audiogram MP4 or re-voiced video output
+  audiogram       Boolean   @default(false)   // produce a square waveform MP4 alongside audio
   durationMs      Int?
   chapters        Json?                       // [{ title, startMs, speaker }]
   costCents       Int?                        // billing estimate for cloud providers
@@ -196,7 +219,7 @@ model Generation {
   @@index([userId, createdAt])
   @@index([status])
 }
-enum GenKind   { PRESENTATION PODCAST REVOICE }
+enum GenKind   { PRESENTATION PODCAST REVOICE VIDEO_REVOICE AUDIOGRAM }
 enum GenStatus { QUEUED RUNNING DONE FAILED CANCELLED }
 
 model GenerationSpeaker {
@@ -260,7 +283,9 @@ class TTSProvider(Protocol):
     async def close(self) -> None: ...
 ```
 
-Implementations now include `VieNeuProvider`, `VoxCPM2Provider`, `XTTSProvider`, `F5Provider`, `ElevenLabsProvider`, and `GeminiTTSProvider`. Each reads runtime settings from `provider_configs.config`, so the admin UI can change model, device, mode, or cloning options without code edits. The `/admin/providers` screen exposes provider docs links, setup steps, runtime config fields, and a live `Test` action backed by the worker `/provider-test` endpoint.
+Implementations now include `VieNeuProvider`, `VoxCPM2Provider`, `XTTSProvider`, `F5Provider`, `VibeVoiceProvider`, `XiaomiTTSProvider`, `XAITTSProvider`, `ElevenLabsProvider`, and `GeminiTTSProvider`. Each reads runtime settings from `provider_configs.config`, so the admin UI can change model, device, mode, or cloning options without code edits. The `/admin/providers` screen exposes provider docs links, setup steps, runtime config fields, and a live `Test` action backed by the worker `/provider-test` endpoint.
+
+**Model catalog (P5-01).** Each provider also owns rows in `provider_models`. `/admin/models` lets a super admin click *Fetch latest models* to call the provider's list-models endpoint (Gemini, ElevenLabs, xAI today) and upsert the result. Providers without a public listing endpoint seed from a curated default table — admins can still rename, mark default, enable/disable, or delete rows inline. The catalog table is consumed by provider implementations through `provider_configs.config.modelId`, so picking a different default flows through to the next render.
 
 ## 5. Job Contracts
 
@@ -294,10 +319,30 @@ All jobs serialize to JSON in Redis Streams; worker deserializes via pydantic mo
     { "label": "A", "profileId": "cuid", "segments": [ ... ] },
     { "label": "B", "profileId": "cuid", "segments": [ ... ] }
   ],
-  "output": { "mp3": true, "wav": true, "chapters": true },
-  "pacingLock": false
+  "output": { "mp3": true, "wav": true, "chapters": true, "audiogram": false },
+  "pacingLock": false,
+  "audiogramTitle": "Optional title for the audiogram MP4"
 }
 ```
+
+### 5.4 `render.video_revoice` (Mode B)
+```json
+{
+  "generationId": "cuid",
+  "providerId": "cuid",
+  "sourceVideoKey": "uploads/videos/<userId>/<uuid>.mp4",
+  "speakers": [
+    { "label": "A", "profileId": "cuid", "segments": [ ... ] },
+    { "label": "B", "profileId": "cuid", "segments": [ ... ] }
+  ],
+  "captions": true
+}
+```
+
+The worker pipeline (`apps/worker/src/worker/pipelines/video_revoice.py`) downloads the source video, synthesizes each segment with the assigned speaker's voice, muxes the new track back into the source video via `ffmpeg` (`-c:v copy`, `-map 0:v:0 -map 1:a:0`), and optionally burns ASS subtitles. Audio side-products (MP3, WAV) are still uploaded so the user can download audio-only.
+
+### 5.5 Audiogram (Mode A)
+Triggered inline when a render job carries `output.audiogram = true`. After the audio is encoded, `apps/worker/src/worker/audio/audiogram.py` calls `ffmpeg` with the `showwaves` filter to generate a square (1080×1080) MP4 with a moving waveform overlaid on a dark canvas. Per-chapter (or per-segment) captions are burned via ASS subtitles. Output is stored at `renders/{generationId}/audiogram.mp4` and written back to `Generation.outputVideoKey`.
 
 Workers post progress events to Redis channel `job:<generationId>:events` as:
 ```json
@@ -334,6 +379,7 @@ Routes under `/admin`. SUPER_ADMIN sees all; ADMIN sees all except provider API 
 |---|---|
 | `/admin/users` | List, invite, edit role, set quota, deactivate |
 | `/admin/providers` | List, add/edit config, follow provider docs, test, enable, toggle default |
+| `/admin/models` | Pull latest model catalog per provider, edit names/languages, mark default, enable/disable |
 | `/admin/library` | Browse all profiles, mark shared, lock, delete |
 | `/admin/generations` | Browse, replay, delete, export CSV |
 | `/admin/audit` | Filterable audit log |

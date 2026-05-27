@@ -35,6 +35,7 @@ async def run_render(
     pacing_lock: bool,
     progress_fn: Callable[[str, float, str], Awaitable[None]],
     result_fn: Callable[..., Awaitable[None]],
+    audiogram_title: str | None = None,
 ) -> None:
     logger.info("Render start", generation_id=generation_id, kind=kind)
 
@@ -99,6 +100,26 @@ async def run_render(
             wav_key = f"renders/{generation_id}/output.wav"
             await asyncio.to_thread(upload_object, wav_24bit_path, wav_key, "audio/wav")
 
+        # Audiogram (Mode A) — square MP4 with waveform + chapter captions.
+        video_key: str | None = None
+        if output.get("audiogram"):
+            from ..audio.audiogram import render_audiogram
+
+            await progress_fn(generation_id, 0.93, "Rendering audiogram")
+            audiogram_segments = [
+                {"start_ms": c["start_ms"], "end_ms": c["end_ms"], "text": c["title"]}
+                for c in chapters
+            ]
+            audiogram_path = tmp_dir / "audiogram.mp4"
+            await render_audiogram(
+                audio_path=output_wav,
+                out_path=audiogram_path,
+                segments=audiogram_segments,
+                title=audiogram_title,
+            )
+            video_key = f"renders/{generation_id}/audiogram.mp4"
+            await asyncio.to_thread(upload_object, audiogram_path, video_key, "video/mp4")
+
         duration_ms = await get_duration_ms(output_wav)
 
     await progress_fn(generation_id, 1.0, "Done")
@@ -106,6 +127,7 @@ async def run_render(
         generation_id=generation_id,
         output_mp3_key=mp3_key,
         output_wav_key=wav_key,
+        output_video_key=video_key,
         duration_ms=duration_ms,
     )
     logger.info("Render complete", generation_id=generation_id, duration_ms=duration_ms)

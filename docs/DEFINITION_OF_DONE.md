@@ -105,6 +105,25 @@ These are **not** valid reasons to mark a task done:
 
 The author marks their own DoD checklist in the PR description. The reviewer verifies and signs off. The final ☑️ in `docs/TASKS.md` goes in with the merge commit — not before.
 
+## Mode A & Mode B addenda (2026-05-26)
+
+When a PR adds or modifies the audiogram pipeline, video re-voice pipeline, or
+model catalog, the standard DoD also requires:
+
+- [ ] **Audiogram.** Synthesized MP4 plays in QuickTime / VLC / Chrome; waveform
+  is visible; captions appear in sync with the speaker. ffmpeg invocation is
+  covered by a unit test on a short fixture (≤ 2 s of silence is fine).
+- [ ] **Video re-voice.** Output preserves the original video frames (no
+  re-encode of `0:v:0`); audio track is fully replaced; ASR-driven segments
+  round-trip through the timed-script format. Tested on a NotebookLM podcast
+  export and a generic MP4 in CI fixtures.
+- [ ] **Model catalog.** `admin.fetchProviderModels` is idempotent (re-running
+  upserts, never duplicates). The UI surfaces `source: "curated"` vs
+  `"remote"`. New provider adapters return a stable `CatalogResult` shape.
+- [ ] **i18n parity.** Every new copy string is present in both `messages/en.json`
+  and `messages/vi.json` (CI `pnpm i18n:check` must pass).
+
 ## Changelog
 - 2026-04-19: v1.0 initial DoD.
 - 2026-04-20: Added mandatory green GitHub Actions checks and workflow/toolchain consistency checks before merge.
+- 2026-05-26: Added Mode A (audiogram) / Mode B (video re-voice) / model catalog addenda.

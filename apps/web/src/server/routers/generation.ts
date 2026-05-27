@@ -1,7 +1,11 @@
 import { z } from "zod"
 import { TRPCError } from "@trpc/server"
 import { router, protectedProcedure, adminProcedure, publicProcedure } from "@/server/trpc"
-import { enqueueRenderJob, enqueueAsrJob } from "@/server/queue/producers"
+import {
+  enqueueRenderJob,
+  enqueueAsrJob,
+  enqueueVideoRevoiceJob,
+} from "@/server/queue/producers"
 import { generatePresignedGetUrl, generatePresignedPutUrl } from "@/server/services/storage"
 import { db } from "@/server/db/client"
 import { GenKind, GenStatus } from "@prisma/client"
@@ -13,6 +17,12 @@ const INPUT_GENERATION_MINUTES_CAP = 12 * 60
 const RENDER_RATE_LIMIT = 10
 const RENDER_RATE_WINDOW_S = 60
 const ALLOWED_SOURCE_MIMES = ["audio/mpeg", "audio/mp4", "audio/x-m4a"]
+const ALLOWED_VIDEO_MIMES = [
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+  "video/x-matroska",
+]
 
 const segmentSchema = z.object({
   startMs: z.number().min(0),
@@ -86,6 +96,8 @@ export const generationRouter = router({
       script: z.string().min(10),
       estimatedMinutes: z.number().min(0.1).max(INPUT_GENERATION_MINUTES_CAP),
       providerId: z.string().optional(),
+      audiogram: z.boolean().default(false),
+      audiogramTitle: z.string().max(120).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await enforceRenderRateLimit(ctx.session.user.id)
@@ -102,6 +114,7 @@ export const generationRouter = router({
           status: GenStatus.QUEUED,
           providerId,
           inputScript: input.script,
+          audiogram: input.audiogram,
           speakers: {
             create: [{
               label: "A",
@@ -117,8 +130,9 @@ export const generationRouter = router({
         providerId,
         kind: "PRESENTATION",
         speakers: [{ label: "A", profileId: input.profileId, segments: [], script: input.script }],
-        output: { mp3: true, wav: true, chapters: false },
+        output: { mp3: true, wav: true, chapters: false, audiogram: input.audiogram },
         pacingLock: false,
+        ...(input.audiogramTitle ? { audiogramTitle: input.audiogramTitle } : {}),
       })
 
       await ctx.audit({ actorId: ctx.session.user.id, action: "generation.create", targetType: "Generation", targetId: generation.id, meta: { kind: "PRESENTATION" } })
@@ -132,6 +146,8 @@ export const generationRouter = router({
       estimatedMinutes: z.number().min(0.1).max(INPUT_GENERATION_MINUTES_CAP),
       pacingLock: z.boolean().default(false),
       providerId: z.string().optional(),
+      audiogram: z.boolean().default(false),
+      audiogramTitle: z.string().max(120).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await enforceRenderRateLimit(ctx.session.user.id)
@@ -156,6 +172,7 @@ export const generationRouter = router({
           status: GenStatus.QUEUED,
           providerId,
           inputScript: script,
+          audiogram: input.audiogram,
           speakers: {
             create: input.speakers.map((s) => ({
               label: s.label,
@@ -171,8 +188,9 @@ export const generationRouter = router({
         providerId,
         kind: "PODCAST",
         speakers: input.speakers,
-        output: { mp3: true, wav: true, chapters: true },
+        output: { mp3: true, wav: true, chapters: true, audiogram: input.audiogram },
         pacingLock: input.pacingLock,
+        ...(input.audiogramTitle ? { audiogramTitle: input.audiogramTitle } : {}),
       })
 
       await ctx.audit({ actorId: ctx.session.user.id, action: "generation.create", targetType: "Generation", targetId: generation.id, meta: { kind: "PODCAST" } })
@@ -199,6 +217,8 @@ export const generationRouter = router({
       estimatedMinutes: z.number().min(0.1).max(INPUT_GENERATION_MINUTES_CAP),
       pacingLock: z.boolean().default(false),
       providerId: z.string().optional(),
+      audiogram: z.boolean().default(false),
+      audiogramTitle: z.string().max(120).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await enforceRenderRateLimit(ctx.session.user.id)
@@ -214,6 +234,7 @@ export const generationRouter = router({
           status: GenStatus.QUEUED,
           providerId,
           sourceAudioKey: input.sourceAudioKey,
+          audiogram: input.audiogram,
           speakers: {
             create: input.speakers.map((s) => ({
               label: s.label,
@@ -229,11 +250,83 @@ export const generationRouter = router({
         providerId,
         kind: "REVOICE",
         speakers: input.speakers,
-        output: { mp3: true, wav: true, chapters: true },
+        output: { mp3: true, wav: true, chapters: true, audiogram: input.audiogram },
         pacingLock: input.pacingLock,
+        ...(input.audiogramTitle ? { audiogramTitle: input.audiogramTitle } : {}),
       })
 
       await ctx.audit({ actorId: ctx.session.user.id, action: "generation.create", targetType: "Generation", targetId: generation.id, meta: { kind: "REVOICE" } })
+
+      return { generationId: generation.id }
+    }),
+
+  // Mode B — request upload URL for source video (NotebookLM-style podcast video).
+  requestSourceVideoUploadUrl: protectedProcedure
+    .input(z.object({ filename: z.string(), contentType: z.string(), contentLength: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ALLOWED_VIDEO_MIMES.includes(input.contentType)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Unsupported video type" })
+      }
+      // 1 GB hard cap; admins can adjust via settings later.
+      if (input.contentLength > 1024 * 1024 * 1024) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Video exceeds 1 GB limit" })
+      }
+      const ext = input.filename.split(".").pop() ?? "mp4"
+      const key = `uploads/videos/${ctx.session.user.id}/${randomUUID()}.${ext}`
+      const url = await generatePresignedPutUrl(key, input.contentType, 3600)
+      return { uploadUrl: url, storageKey: key }
+    }),
+
+  // Mode B — submit a video re-voice job. Speakers are pre-aligned (typically by
+  // running submitAsr on the extracted audio first, then letting the user map
+  // diarized labels → voice profiles in the UI).
+  submitVideoRevoice: protectedProcedure
+    .input(z.object({
+      sourceVideoKey: z.string(),
+      speakers: z.array(speakerSchema).min(1).max(2),
+      estimatedMinutes: z.number().min(0.1).max(INPUT_GENERATION_MINUTES_CAP),
+      captions: z.boolean().default(true),
+      providerId: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await enforceRenderRateLimit(ctx.session.user.id)
+      await enforceQuota(ctx, input.estimatedMinutes)
+      await enforceGenerationLimit(ctx.db, input.estimatedMinutes)
+      await assertProfilesReady(ctx.db, input.speakers.map((s) => s.profileId))
+      const providerId = await resolveProvider(ctx, input.providerId)
+
+      const generation = await ctx.db.generation.create({
+        data: {
+          userId: ctx.session.user.id,
+          kind: GenKind.VIDEO_REVOICE,
+          status: GenStatus.QUEUED,
+          providerId,
+          sourceVideoKey: input.sourceVideoKey,
+          speakers: {
+            create: input.speakers.map((s) => ({
+              label: s.label,
+              profileId: s.profileId,
+              segments: s.segments,
+            })),
+          },
+        },
+      })
+
+      await enqueueVideoRevoiceJob({
+        generationId: generation.id,
+        providerId,
+        sourceVideoKey: input.sourceVideoKey,
+        speakers: input.speakers,
+        captions: input.captions,
+      })
+
+      await ctx.audit({
+        actorId: ctx.session.user.id,
+        action: "generation.create",
+        targetType: "Generation",
+        targetId: generation.id,
+        meta: { kind: "VIDEO_REVOICE" },
+      })
 
       return { generationId: generation.id }
     }),
@@ -277,12 +370,13 @@ export const generationRouter = router({
       if (gen.userId !== ctx.session.user.id) throw new TRPCError({ code: "FORBIDDEN" })
       if (gen.status !== GenStatus.DONE) throw new TRPCError({ code: "BAD_REQUEST", message: "Not ready" })
 
-      const [mp3Url, wavUrl] = await Promise.all([
+      const [mp3Url, wavUrl, videoUrl] = await Promise.all([
         gen.outputMp3Key ? generatePresignedGetUrl(gen.outputMp3Key, 3600) : null,
         gen.outputWavKey ? generatePresignedGetUrl(gen.outputWavKey, 3600) : null,
+        gen.outputVideoKey ? generatePresignedGetUrl(gen.outputVideoKey, 3600) : null,
       ])
 
-      return { mp3Url, wavUrl }
+      return { mp3Url, wavUrl, videoUrl }
     }),
 
   cancel: protectedProcedure
@@ -352,9 +446,10 @@ export const generationRouter = router({
       if (gen.shareExpiresAt && gen.shareExpiresAt < new Date()) throw new TRPCError({ code: "FORBIDDEN", message: "Share link has expired" })
       if (gen.status !== GenStatus.DONE) throw new TRPCError({ code: "BAD_REQUEST", message: "Not ready" })
 
-      const [mp3Url, wavUrl] = await Promise.all([
+      const [mp3Url, wavUrl, videoUrl] = await Promise.all([
         gen.outputMp3Key ? generatePresignedGetUrl(gen.outputMp3Key, 3600) : null,
         gen.outputWavKey ? generatePresignedGetUrl(gen.outputWavKey, 3600) : null,
+        gen.outputVideoKey ? generatePresignedGetUrl(gen.outputVideoKey, 3600) : null,
       ])
 
       return {
@@ -364,6 +459,7 @@ export const generationRouter = router({
         finishedAt: gen.finishedAt,
         mp3Url,
         wavUrl,
+        videoUrl,
       }
     }),
 

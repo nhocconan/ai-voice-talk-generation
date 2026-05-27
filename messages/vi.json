@@ -127,7 +127,16 @@
     "quotaExceeded": "Bạn đã hết hạn mức. Liên hệ admin để tăng hạn mức.",
     "presentationDesc": "Tạo file âm thanh từ kịch bản với một giọng đọc duy nhất",
     "podcastDesc": "Tạo podcast với 2 người nói luân phiên",
-    "revoiceDesc": "Thay thế giọng trong file âm thanh có sẵn bằng giọng clone"
+    "revoiceDesc": "Thay thế giọng trong file âm thanh có sẵn bằng giọng clone",
+    "videoRevoice": "Lồng tiếng Video",
+    "videoRevoiceDesc": "Thay giọng trong video podcast kiểu NotebookLM bằng giọng đã clone, tùy chọn ghi phụ đề vào video",
+    "videoUpload": "Tải video gốc lên",
+    "videoUploadHint": "MP4 / MOV / WebM / MKV tối đa 1 GB",
+    "burnCaptions": "Ghi phụ đề vào video kết quả",
+    "audiogram": "Tạo audiogram",
+    "audiogramHint": "MP4 vuông kèm dạng sóng và phụ đề, sẵn sàng đăng mạng xã hội",
+    "audiogramTitle": "Tiêu đề audiogram",
+    "downloadVideo": "Tải Video"
   },
   "history": {
     "title": "Lịch sử tạo",
@@ -146,7 +155,9 @@
     "statusCancelled": "Đã hủy",
     "kindPresentation": "Thuyết trình",
     "kindPodcast": "Podcast",
-    "kindRevoice": "Lồng tiếng"
+    "kindRevoice": "Lồng tiếng",
+    "kindVideoRevoice": "Lồng tiếng Video",
+    "kindAudiogram": "Audiogram"
   },
   "admin": {
     "title": "Quản trị hệ thống",
@@ -181,6 +192,16 @@
     "roleSuperAdmin": "Super Admin",
     "roleUser": "Người dùng",
     "quotaMinutes": "Hạn mức (phút)",
-    "usedMinutes": "Đã dùng (phút)"
+    "usedMinutes": "Đã dùng (phút)",
+    "models": "Mô hình",
+    "modelCatalog": "Danh mục mô hình",
+    "fetchLatestModels": "Lấy danh sách mô hình mới nhất",
+    "modelSynced": "Đã đồng bộ {count} mô hình ({source})",
+    "modelId": "Mã mô hình",
+    "modelDisplayName": "Tên hiển thị",
+    "modelKind": "Loại",
+    "modelLanguages": "Ngôn ngữ",
+    "modelDefault": "Mặc định",
+    "modelLastSynced": "Đồng bộ lần cuối"
   }
 }
