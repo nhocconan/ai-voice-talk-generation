@@ -154,6 +154,62 @@ async function main() {
     },
   })
 
+  // LLM providers (script drafting)
+  await prisma.providerConfig.upsert({
+    where: { name: ProviderName.GEMINI_LLM },
+    update: {},
+    create: {
+      name: ProviderName.GEMINI_LLM,
+      enabled: false,
+      isDefault: false,
+      config: { model: "gemini-2.5-flash" },
+    },
+  })
+
+  await prisma.providerConfig.upsert({
+    where: { name: ProviderName.GROQ },
+    update: {},
+    create: {
+      name: ProviderName.GROQ,
+      enabled: false,
+      isDefault: false,
+      config: { baseUrl: "https://api.groq.com/openai/v1", model: "llama-3.3-70b-versatile" },
+    },
+  })
+
+  await prisma.providerConfig.upsert({
+    where: { name: ProviderName.XAI_LLM },
+    update: {},
+    create: {
+      name: ProviderName.XAI_LLM,
+      enabled: false,
+      isDefault: false,
+      config: { baseUrl: "https://api.x.ai/v1", model: "grok-4.3" },
+    },
+  })
+
+  await prisma.providerConfig.upsert({
+    where: { name: ProviderName.GROK_OAUTH },
+    update: {},
+    create: {
+      name: ProviderName.GROK_OAUTH,
+      enabled: false,
+      isDefault: false,
+      config: { model: "grok-4.3" },
+    },
+  })
+
+  await prisma.providerConfig.upsert({
+    where: { name: ProviderName.OLLAMA },
+    update: {},
+    create: {
+      name: ProviderName.OLLAMA,
+      enabled: false,
+      isDefault: false,
+      config: { baseUrl: "http://localhost:11434/v1", model: "qwen2.5:7b" },
+    },
+  })
+
   // Default settings
   const settings: Array<{ key: string; value: Prisma.InputJsonValue }> = [
     { key: "retention.renderDays", value: 90 },

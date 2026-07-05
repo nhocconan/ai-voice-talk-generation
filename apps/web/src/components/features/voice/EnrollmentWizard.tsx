@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
+import { useTranslations } from "next-intl"
 import { trpc } from "@/lib/trpc/client"
 import { InBrowserRecorder } from "./InBrowserRecorder"
 import { AudioUploader } from "./AudioUploader"
@@ -17,7 +18,6 @@ const profileSchema = z.object({
 })
 type ProfileFormData = z.infer<typeof profileSchema>
 
-const CONSENT_TEXT = "I consent to my voice being enrolled in Voice Studio and used to generate audio content. I understand my voice data is stored securely and can be deleted at any time."
 const GUIDED_PROMPTS = [
   "Xin chào, tôi là thành viên của đội ngũ Demo. Chúng tôi cống hiến để tạo ra những giá trị tốt nhất.",
   "Hello, I'm part of the Demo team. We are committed to building innovative solutions for our clients.",
@@ -30,6 +30,7 @@ type Mode = "guided" | "upload"
 type Step = "info" | "record" | "done"
 
 export function EnrollmentWizard() {
+  const t = useTranslations("voices")
   const router = useRouter()
   const [step, setStep] = useState<Step>("info")
   const [mode, setMode] = useState<Mode>("guided")
@@ -45,7 +46,7 @@ export function EnrollmentWizard() {
     const profile = await createProfile.mutateAsync({
       name: data.name,
       lang: data.lang,
-      consentText: CONSENT_TEXT,
+      consentText: t("consentText"),
     })
     setProfileId(profile.id)
     setStep("record")
@@ -58,22 +59,22 @@ export function EnrollmentWizard() {
           className="bg-[var(--color-surface-0)] rounded-[var(--radius-card)] p-6"
           style={{ boxShadow: "var(--shadow-outline-ring), var(--shadow-soft-lift)" }}
         >
-          <h2 className="text-body-med mb-4">Profile Details</h2>
+          <h2 className="text-body-med mb-4">{t("profileDetails")}</h2>
 
           <div className="space-y-4">
             <div>
-              <label htmlFor="name" className="block text-caption mb-1.5">Profile Name</label>
+              <label htmlFor="name" className="block text-caption mb-1.5">{t("profileNameLabel")}</label>
               <input
                 id="name"
                 {...register("name")}
-                placeholder="e.g., CEO Voice VI"
+                placeholder={t("profileNamePlaceholder")}
                 className="w-full px-3 py-2.5 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui"
               />
               {errors.name && <p className="text-micro text-[var(--color-danger)] mt-1">{errors.name.message}</p>}
             </div>
 
             <div>
-              <label className="block text-caption mb-1.5">Language</label>
+              <label className="block text-caption mb-1.5">{t("languageLabel")}</label>
               <div className="flex gap-2">
                 {(["vi", "en", "multi"] as const).map((lang) => (
                   <label key={lang} className="flex items-center gap-2 cursor-pointer">
@@ -81,7 +82,7 @@ export function EnrollmentWizard() {
                     <span
                       className="px-3 py-1.5 rounded-[var(--radius-pill)] text-caption border border-[var(--color-border)] hover:bg-[var(--color-surface-1)] cursor-pointer transition-colors"
                     >
-                      {lang === "vi" ? "Tiếng Việt" : lang === "en" ? "English" : "Multi"}
+                      {lang === "vi" ? "Tiếng Việt" : lang === "en" ? "English" : t("langMulti")}
                     </span>
                   </label>
                 ))}
@@ -89,8 +90,8 @@ export function EnrollmentWizard() {
             </div>
 
             <div>
-              <label className="block text-caption mb-2">Recording Mode</label>
-              <div className="grid grid-cols-2 gap-3">
+              <label className="block text-caption mb-2">{t("recordingModeLabel")}</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {(["guided", "upload"] as const).map((m) => (
                   <button
                     key={m}
@@ -99,13 +100,13 @@ export function EnrollmentWizard() {
                     className={cn(
                       "p-4 rounded-[var(--radius-card)] text-left border transition-colors",
                       mode === m
-                        ? "border-black bg-[var(--color-surface-1)]"
+                        ? "border-[var(--color-emphasis)] bg-[var(--color-surface-1)]"
                         : "border-[var(--color-border)] hover:bg-[var(--color-surface-1)]",
                     )}
                   >
-                    <div className="text-body-med">{m === "guided" ? "Guided Recording" : "Upload Files"}</div>
+                    <div className="text-body-med">{m === "guided" ? t("modeGuidedTitle") : t("modeUploadTitle")}</div>
                     <div className="text-caption text-[var(--color-text-muted)] mt-1">
-                      {m === "guided" ? "Record 3–5 prompts in-browser" : "Upload mp3, m4a, or wav"}
+                      {m === "guided" ? t("modeGuidedDesc") : t("modeUploadDesc")}
                     </div>
                   </button>
                 ))}
@@ -114,14 +115,14 @@ export function EnrollmentWizard() {
 
             {/* Consent */}
             <div className="p-4 bg-[var(--color-surface-1)] rounded-[var(--radius-md)]">
-              <p className="text-caption text-[var(--color-text-secondary)] mb-3">{CONSENT_TEXT}</p>
+              <p className="text-caption text-[var(--color-text-secondary)] mb-3">{t("consentText")}</p>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
                   {...register("consentGiven")}
                   className="w-4 h-4 rounded"
                 />
-                <span className="text-caption">I agree to the above</span>
+                <span className="text-caption">{t("consentAgree")}</span>
               </label>
               {errors.consentGiven && <p className="text-micro text-[var(--color-danger)] mt-1">{errors.consentGiven.message}</p>}
             </div>
@@ -131,9 +132,9 @@ export function EnrollmentWizard() {
         <button
           type="submit"
           disabled={createProfile.isPending}
-          className="h-10 px-6 rounded-[var(--radius-pill)] bg-black text-white text-button disabled:opacity-50 hover:opacity-90 transition-opacity"
+          className="h-10 px-6 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button disabled:opacity-50 hover:opacity-90 transition-opacity"
         >
-          {createProfile.isPending ? "Creating…" : "Continue →"}
+          {createProfile.isPending ? t("creating") : t("continue")}
         </button>
       </form>
     )
@@ -171,22 +172,22 @@ export function EnrollmentWizard() {
       <div className="w-12 h-12 rounded-full bg-[var(--color-success)]/10 flex items-center justify-center mx-auto mb-4">
         <span className="text-[var(--color-success)] text-xl">✓</span>
       </div>
-      <h2 className="text-display-card mb-2">Profile created</h2>
+      <h2 className="text-display-card mb-2">{t("profileCreated")}</h2>
       <p className="text-body text-[var(--color-text-secondary)] mb-6">
-        Your voice samples are being processed. Quality scores will appear shortly.
+        {t("profileCreatedDesc")}
       </p>
       <div className="flex gap-3 justify-center">
         <button
           onClick={() => profileId && router.push(`/voices/${profileId}`)}
-          className="h-10 px-6 rounded-[var(--radius-pill)] bg-black text-white text-button hover:opacity-90"
+          className="h-10 px-6 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button hover:opacity-90"
         >
-          View Profile
+          {t("viewProfile")}
         </button>
         <button
           onClick={() => router.push("/voices")}
           className="h-10 px-6 rounded-[var(--radius-pill)] border border-[var(--color-border)] text-button hover:bg-[var(--color-surface-1)]"
         >
-          All Profiles
+          {t("allProfiles")}
         </button>
       </div>
     </div>

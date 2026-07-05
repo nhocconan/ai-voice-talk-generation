@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { getTranslations } from "next-intl/server"
 import { auth } from "@/server/auth"
 import { db } from "@/server/db/client"
 import Link from "next/link"
@@ -9,6 +10,8 @@ export const metadata: Metadata = { title: "Dashboard" }
 export default async function DashboardPage() {
   const session = await auth()
   if (!session) return null
+
+  const t = await getTranslations("dashboard")
 
   const [profileCount, recentGens, user] = await Promise.all([
     db.voiceProfile.count({ where: { OR: [{ ownerId: session.user.id }, { isOrgShared: true }] } }),
@@ -26,23 +29,23 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-display-card">Welcome back, {user?.name ?? ""}.</h1>
-        <p className="text-body text-[var(--color-text-secondary)] mt-1">Here's your voice studio at a glance.</p>
+        <h1 className="text-display-card">{t("welcomeUser", { name: user?.name ?? "" })}</h1>
+        <p className="text-body text-[var(--color-text-secondary)] mt-1">{t("subtitle")}</p>
       </div>
 
       {/* Stats row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard icon={<MicIcon size={20} />} label="Voice Profiles" value={profileCount} href="/voices" />
-        <StatCard icon={<PlayCircleIcon size={20} />} label="Total Generations" value={recentGens.length} href="/history" />
+        <StatCard icon={<MicIcon size={20} />} label={t("voiceProfiles")} value={profileCount} href="/voices" />
+        <StatCard icon={<PlayCircleIcon size={20} />} label={t("totalGenerations")} value={recentGens.length} href="/history" />
         <div
           className="bg-[var(--color-surface-0)] rounded-[var(--radius-card)] p-6"
           style={{ boxShadow: "var(--shadow-outline-ring), var(--shadow-soft-lift)" }}
         >
           <div className="flex items-center gap-2 mb-3">
             <ClockIcon size={20} className="text-[var(--color-text-muted)]" />
-            <span className="text-caption text-[var(--color-text-muted)]">Monthly Quota</span>
+            <span className="text-caption text-[var(--color-text-muted)]">{t("monthlyQuota")}</span>
           </div>
-          <div className="text-display-card mb-2">{user?.usedMinutes ?? 0} / {user?.quotaMinutes ?? 0} min</div>
+          <div className="text-display-card mb-2">{user?.usedMinutes ?? 0} / {user?.quotaMinutes ?? 0} {t("minShort")}</div>
           <div className="h-2 bg-[var(--color-surface-1)] rounded-full overflow-hidden">
             <div
               className="h-full rounded-full transition-all"
@@ -57,11 +60,11 @@ export default async function DashboardPage() {
 
       {/* Quick actions */}
       <div>
-        <h2 className="text-body-med mb-4">Quick Start</h2>
+        <h2 className="text-body-med mb-4">{t("quickStart")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <ActionCard href="/generate" label="New Presentation" desc="Single-speaker TTS from script" />
-          <ActionCard href="/generate/podcast" label="New Podcast" desc="Two-speaker timed script" />
-          <ActionCard href="/generate/revoice" label="Re-Voice Audio" desc="Replace voices in existing audio" />
+          <ActionCard href="/generate" label={t("newPresentation")} desc={t("newPresentationDesc")} />
+          <ActionCard href="/generate/podcast" label={t("newPodcast")} desc={t("newPodcastDesc")} />
+          <ActionCard href="/generate/revoice" label={t("reVoiceAudio")} desc={t("reVoiceAudioDesc")} />
         </div>
       </div>
 
@@ -69,9 +72,9 @@ export default async function DashboardPage() {
       {recentGens.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-body-med">Recent</h2>
+            <h2 className="text-body-med">{t("recent")}</h2>
             <Link href="/history" className="text-caption text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]">
-              View all →
+              {t("viewAll")} →
             </Link>
           </div>
           <div className="space-y-2">

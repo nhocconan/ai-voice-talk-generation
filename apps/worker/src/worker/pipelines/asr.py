@@ -54,10 +54,14 @@ async def run_asr(
 def _transcribe(audio_path: Path) -> list[dict]:
     from faster_whisper import WhisperModel  # type: ignore[import]
 
-    model = WhisperModel("large-v3", device=settings.torch_device, compute_type="auto")
+    model = WhisperModel(
+        settings.asr_model,
+        device=settings.torch_device,
+        compute_type=settings.asr_compute_type,
+    )
     transcription_segments, _ = model.transcribe(
         str(audio_path),
-        word_timestamps=True,
+        word_timestamps=True,  # word-aligned segment bounds → tighter re-voice slots
         vad_filter=True,
         language=None,  # auto-detect
     )

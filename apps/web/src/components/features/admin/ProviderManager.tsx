@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations, useLocale } from "next-intl"
 import {
   BeakerIcon,
   CheckCircleIcon,
@@ -55,7 +56,176 @@ function configSummary(config: Record<string, unknown>, keys: string[]): string 
     .join(" · ")
 }
 
+// SuperGrok / X Premium+ OAuth device-code connect flow for the GROK_OAUTH provider.
+function GrokOAuthConnect({ alreadyConnected }: { alreadyConnected: boolean }) {
+  const t = useTranslations("admin")
+  const start = trpc.admin.startXaiOAuth.useMutation()
+  const poll = trpc.admin.pollXaiOAuth.useMutation()
+  const disconnect = trpc.admin.disconnectXaiOAuth.useMutation()
+  const importToken = trpc.admin.importXaiOAuthToken.useMutation()
+  const [device, setDevice] = useState<{
+    deviceCode: string
+    userCode: string
+    verificationUriComplete: string
+    interval: number
+    expiresIn: number
+  } | null>(null)
+  const [connected, setConnected] = useState(alreadyConnected)
+  const [status, setStatus] = useState("")
+  const [showPaste, setShowPaste] = useState(false)
+  const [token, setToken] = useState("")
+
+  async function begin() {
+    setConnected(false)
+    setStatus(t("grok.starting"))
+    try {
+      const d = await start.mutateAsync()
+      setDevice(d)
+      // Auto-open the approval page so the user only has to click "Approve".
+      window.open(d.verificationUriComplete, "_blank", "noopener,noreferrer")
+      setStatus(t("grok.waiting"))
+      const deadline = Date.now() + d.expiresIn * 1000
+      const tick = async () => {
+        if (Date.now() > deadline) {
+          setStatus(t("grok.expired"))
+          setDevice(null)
+          return
+        }
+        try {
+          const r = await poll.mutateAsync({ deviceCode: d.deviceCode })
+          if (r.connected) {
+            setConnected(true)
+            setDevice(null)
+            setStatus(t("grok.connected"))
+            return
+          }
+        } catch (e) {
+          setStatus(String(e))
+          setDevice(null)
+          return
+        }
+        setTimeout(() => void tick(), d.interval * 1000)
+      }
+      setTimeout(() => void tick(), d.interval * 1000)
+    } catch (e) {
+      setStatus(String(e))
+    }
+  }
+
+  async function doDisconnect() {
+    try {
+      await disconnect.mutateAsync()
+      setConnected(false)
+      setDevice(null)
+      setStatus(t("grok.disconnected"))
+    } catch (e) {
+      setStatus(String(e))
+    }
+  }
+
+  async function doImport() {
+    setStatus("")
+    try {
+      await importToken.mutateAsync({ token })
+      setConnected(true)
+      setToken("")
+      setShowPaste(false)
+      setStatus(t("grok.connected"))
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  return (
+    <section className="space-y-2">
+      <h4 className="text-body-med text-[var(--color-text-primary)]">{t("grok.title")}</h4>
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={() => void begin()}
+          disabled={start.isPending || Boolean(device)}
+          className="h-9 px-4 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button disabled:opacity-50"
+        >
+          {connected ? t("grok.reconnect") : t("grok.connect")}
+        </button>
+        {connected && (
+          <>
+            <span className="flex items-center gap-1 text-caption" style={{ color: "var(--color-success)" }}>
+              <CheckCircleIcon size={14} /> {t("grok.connectedBadge")}
+            </span>
+            <button
+              type="button"
+              onClick={() => void doDisconnect()}
+              disabled={disconnect.isPending}
+              className="h-9 px-4 rounded-[var(--radius-pill)] border border-[var(--color-border)] text-button hover:bg-[var(--color-surface-1)] transition-colors disabled:opacity-50"
+            >
+              {t("grok.disconnect")}
+            </button>
+          </>
+        )}
+      </div>
+      {device && (
+        <div className="p-3 rounded-[var(--radius-md)] text-caption bg-[var(--color-surface-1)] space-y-1">
+          <p>
+            {t("grok.openLink")}{" "}
+            <a
+              href={device.verificationUriComplete}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+              style={{ color: "var(--color-accent)" }}
+            >
+              {device.verificationUriComplete}
+            </a>
+          </p>
+          <p>
+            {t("grok.codeLabel")}: <span className="font-mono text-body-med">{device.userCode}</span>
+          </p>
+        </div>
+      )}
+      {status && <p className="text-caption text-[var(--color-text-muted)]">{status}</p>}
+
+      <div className="pt-1">
+        <button
+          type="button"
+          onClick={() => setShowPaste((v) => !v)}
+          aria-expanded={showPaste}
+          className="text-caption underline text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+        >
+          {t("grok.pasteToggle")}
+        </button>
+        {showPaste && (
+          <div className="mt-2 space-y-2">
+            <label htmlFor="grok-token" className="block text-caption text-[var(--color-text-primary)]">
+              {t("grok.pasteLabel")}
+            </label>
+            <textarea
+              id="grok-token"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              rows={3}
+              placeholder={t("grok.pastePlaceholder")}
+              className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui font-mono"
+            />
+            <p className="text-micro text-[var(--color-text-muted)]">{t("grok.pasteHint")}</p>
+            <button
+              type="button"
+              onClick={() => void doImport()}
+              disabled={importToken.isPending || !token.trim()}
+              className="h-9 px-4 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button disabled:opacity-50"
+            >
+              {importToken.isPending ? t("grok.importing") : t("grok.importSubmit")}
+            </button>
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
 export function ProviderManager() {
+  const t = useTranslations("admin")
+  const locale = useLocale()
   const { data: providers, refetch } = trpc.admin.listProviders.useQuery()
   const update = trpc.admin.updateProvider.useMutation({ onSuccess: () => refetch() })
   const testProvider = trpc.system.testProvider.useMutation()
@@ -112,7 +282,7 @@ export function ProviderManager() {
       setTestResult((prev) => ({ ...prev, [providerId]: result }))
       return result
     } catch (e) {
-      const result = { ok: false, message: `Test failed: ${String(e)}` }
+      const result = { ok: false, message: t("providers.testFailed", { error: String(e) }) }
       setTestResult((prev) => ({ ...prev, [providerId]: result }))
       return result
     } finally {
@@ -123,7 +293,7 @@ export function ProviderManager() {
   return (
     <div className="space-y-3">
       {providers?.map((provider) => {
-        const meta = getProviderMeta(provider.name)
+        const meta = getProviderMeta(provider.name, locale)
         const result = testResult[provider.id]
         const expanded = expandedId === provider.id
         const providerConfig = getProviderConfig(provider, meta?.defaultConfig)
@@ -142,7 +312,7 @@ export function ProviderManager() {
                   <span className="text-micro text-[var(--color-text-muted)] font-mono">{provider.name}</span>
                   {provider.isDefault && (
                     <span className="flex items-center gap-1 text-micro px-2 py-0.5 rounded-full bg-[var(--color-surface-1)]">
-                      <StarIcon size={10} /> Default
+                      <StarIcon size={10} /> {t("providers.default")}
                     </span>
                   )}
                   {provider.enabled ? (
@@ -155,7 +325,7 @@ export function ProviderManager() {
                   <p className="text-caption text-[var(--color-text-secondary)] mt-1">{meta.tagline}</p>
                 )}
                 <p className="text-caption text-[var(--color-text-muted)] mt-1">
-                  API key: {provider.apiKeyLast4 ? `••••${provider.apiKeyLast4}` : provider.apiKeyEnc ? "•••• stored" : meta?.needsApiKey ? "Not configured" : "Not required"}
+                  {t("providers.apiKeyLabel")}: {provider.apiKeyLast4 ? `••••${provider.apiKeyLast4}` : provider.apiKeyEnc ? t("providers.apiKeyStored") : meta?.needsApiKey ? t("providers.apiKeyNotConfigured") : t("providers.apiKeyNotRequired")}
                 </p>
                 {summary && (
                   <p className="text-caption text-[var(--color-text-muted)] mt-1 font-mono">
@@ -169,23 +339,23 @@ export function ProviderManager() {
                   onClick={() => runTest(provider.id)}
                   disabled={testingId === provider.id || (meta?.needsApiKey && !provider.apiKeyEnc)}
                   className="flex items-center gap-1.5 text-caption border border-[var(--color-border)] px-3 py-1.5 rounded-[var(--radius-pill)] hover:bg-[var(--color-surface-1)] transition-colors disabled:opacity-50"
-                  title={meta?.needsApiKey && !provider.apiKeyEnc ? "Add an API key first" : "Run a live test"}
+                  title={meta?.needsApiKey && !provider.apiKeyEnc ? t("providers.addKeyFirst") : t("providers.runLiveTest")}
                 >
                   <BeakerIcon size={12} />
-                  {testingId === provider.id ? "Testing…" : "Test"}
+                  {testingId === provider.id ? t("providers.testing") : t("providers.test")}
                 </button>
                 <button
                   onClick={() => update.mutate({ id: provider.id, enabled: !provider.enabled })}
                   className="text-caption border border-[var(--color-border)] px-3 py-1.5 rounded-[var(--radius-pill)] hover:bg-[var(--color-surface-1)] transition-colors"
                 >
-                  {provider.enabled ? "Disable" : "Enable"}
+                  {provider.enabled ? t("providers.disable") : t("providers.enable")}
                 </button>
                 {!provider.isDefault && provider.enabled && (
                   <button
                     onClick={() => update.mutate({ id: provider.id, isDefault: true })}
                     className="text-caption border border-[var(--color-border)] px-3 py-1.5 rounded-[var(--radius-pill)] hover:bg-[var(--color-surface-1)] transition-colors"
                   >
-                    Set Default
+                    {t("providers.setDefault")}
                   </button>
                 )}
                 {meta?.needsApiKey && (
@@ -193,14 +363,14 @@ export function ProviderManager() {
                     onClick={() => startEditing(provider.id)}
                     className="text-caption border border-[var(--color-border)] px-3 py-1.5 rounded-[var(--radius-pill)] hover:bg-[var(--color-surface-1)] transition-colors"
                   >
-                    {editingId === provider.id ? "Cancel" : provider.apiKeyEnc ? "Replace Key" : "Add Key"}
+                    {editingId === provider.id ? t("providers.cancel") : provider.apiKeyEnc ? t("providers.replaceKey") : t("providers.addKey")}
                   </button>
                 )}
                 <button
                   onClick={() => setExpandedId(expanded ? null : provider.id)}
                   className="flex items-center gap-1 text-caption border border-[var(--color-border)] px-3 py-1.5 rounded-[var(--radius-pill)] hover:bg-[var(--color-surface-1)] transition-colors"
                 >
-                  {expanded ? <><ChevronUpIcon size={12} /> Hide setup</> : <><ChevronDownIcon size={12} /> Setup + config</>}
+                  {expanded ? <><ChevronUpIcon size={12} /> {t("providers.hideSetup")}</> : <><ChevronDownIcon size={12} /> {t("providers.setupConfig")}</>}
                 </button>
               </div>
             </div>
@@ -223,8 +393,8 @@ export function ProviderManager() {
               <div className="mt-4 space-y-3">
                 <p className="text-caption text-[var(--color-text-muted)]">
                   {provider.apiKeyEnc
-                    ? "A key is already stored. Saving here replaces it; leaving this blank keeps the current secret unchanged."
-                    : "Paste the provider API key. It stays hidden after save."}
+                    ? t("providers.keyStoredHelp")
+                    : t("providers.keyPasteHelp")}
                 </p>
 
                 <div className="flex gap-2 flex-wrap">
@@ -232,7 +402,7 @@ export function ProviderManager() {
                     type="password"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={provider.apiKeyEnc ? "Paste replacement API key…" : "Paste API key…"}
+                    placeholder={provider.apiKeyEnc ? t("providers.pasteReplacementKey") : t("providers.pasteKey")}
                     className="flex-1 min-w-[240px] px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui font-mono text-sm"
                   />
                   <button
@@ -243,10 +413,10 @@ export function ProviderManager() {
                       stopEditing()
                     }}
                     disabled={!apiKey || update.isPending || testingId === provider.id}
-                    className="h-9 px-4 rounded-[var(--radius-pill)] bg-black text-white text-button disabled:opacity-50"
-                    title="Verifies the key with a live call before saving"
+                    className="h-9 px-4 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button disabled:opacity-50"
+                    title={t("providers.testSaveTitle")}
                   >
-                    Test &amp; Save
+                    {t("providers.testAndSave")}
                   </button>
                   <button
                     onClick={async () => {
@@ -255,9 +425,9 @@ export function ProviderManager() {
                     }}
                     disabled={!apiKey || update.isPending}
                     className="h-9 px-4 rounded-[var(--radius-pill)] border border-[var(--color-border)] text-caption hover:bg-[var(--color-surface-1)] transition-colors disabled:opacity-50"
-                    title="Save without testing (not recommended)"
+                    title={t("providers.saveAnywayTitle")}
                   >
-                    Save anyway
+                    {t("providers.saveAnyway")}
                   </button>
                   {provider.apiKeyEnc && (
                     <button
@@ -268,7 +438,7 @@ export function ProviderManager() {
                       disabled={update.isPending}
                       className="h-9 px-4 rounded-[var(--radius-pill)] border border-[var(--color-border)] text-caption hover:bg-[var(--color-surface-1)] transition-colors disabled:opacity-50"
                     >
-                      Clear Key
+                      {t("providers.clearKey")}
                     </button>
                   )}
                 </div>
@@ -293,7 +463,7 @@ export function ProviderManager() {
                 </section>
 
                 <section>
-                  <h4 className="text-body-med text-[var(--color-text-primary)]">Setup steps</h4>
+                  <h4 className="text-body-med text-[var(--color-text-primary)]">{t("providers.setupSteps")}</h4>
                   <ol className="list-decimal ml-5 mt-2 space-y-1 text-caption text-[var(--color-text-secondary)]">
                     {meta.setupSteps.map((step, i) => (
                       <li key={i}>{step}</li>
@@ -301,13 +471,19 @@ export function ProviderManager() {
                   </ol>
                 </section>
 
+                {provider.name === "GROK_OAUTH" && (
+                  <GrokOAuthConnect
+                    alreadyConnected={isConfigRecord(provider.config) && "oauth" in provider.config}
+                  />
+                )}
+
                 {meta.configFields && meta.configFields.length > 0 && (
                   <section className="space-y-3">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <div>
-                        <h4 className="text-body-med text-[var(--color-text-primary)]">Configuration</h4>
+                        <h4 className="text-body-med text-[var(--color-text-primary)]">{t("providers.configuration")}</h4>
                         <p className="text-caption text-[var(--color-text-muted)]">
-                          Save provider-specific runtime settings here. They are stored in `provider_configs.config`.
+                          {t("providers.configHelp")}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -316,7 +492,7 @@ export function ProviderManager() {
                           onClick={() => setConfigDrafts((prev) => ({ ...prev, [provider.id]: {} }))}
                           className="text-caption border border-[var(--color-border)] px-3 py-1.5 rounded-[var(--radius-pill)] hover:bg-[var(--color-surface-1)] transition-colors"
                         >
-                          Reset draft
+                          {t("providers.resetDraft")}
                         </button>
                         <button
                           type="button"
@@ -332,9 +508,9 @@ export function ProviderManager() {
                             setConfigDrafts((prev) => ({ ...prev, [provider.id]: {} }))
                           }}
                           disabled={update.isPending}
-                          className="h-9 px-4 rounded-[var(--radius-pill)] bg-black text-white text-button disabled:opacity-50"
+                          className="h-9 px-4 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button disabled:opacity-50"
                         >
-                          Save config
+                          {t("providers.saveConfig")}
                         </button>
                       </div>
                     </div>
@@ -351,7 +527,7 @@ export function ProviderManager() {
                               <select
                                 value={String(rawValue)}
                                 onChange={(e) => setDraftValue(provider.id, field.key, e.target.value)}
-                                className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui bg-white"
+                                className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui bg-[var(--color-surface-0)]"
                               >
                                 {field.options?.map((option) => (
                                   <option key={option.value} value={option.value}>
@@ -398,7 +574,7 @@ export function ProviderManager() {
                 )}
 
                 <section>
-                  <h4 className="text-body-med text-[var(--color-text-primary)]">Supports in this system</h4>
+                  <h4 className="text-body-med text-[var(--color-text-primary)]">{t("providers.supportsInSystem")}</h4>
                   <ul className="list-disc ml-5 mt-2 space-y-1 text-caption text-[var(--color-text-secondary)]">
                     {meta.helpsWith.map((item, i) => (
                       <li key={i}>{item}</li>
@@ -407,7 +583,7 @@ export function ProviderManager() {
                 </section>
 
                 <section>
-                  <h4 className="text-body-med text-[var(--color-text-primary)]">Capabilities</h4>
+                  <h4 className="text-body-med text-[var(--color-text-primary)]">{t("providers.capabilities")}</h4>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {Object.entries(meta.supports)
                       .filter(([key]) => key !== "languages")
@@ -426,7 +602,7 @@ export function ProviderManager() {
                       ))}
                   </div>
                   <p className="text-caption text-[var(--color-text-muted)] mt-2">
-                    Languages: {meta.supports.languages.join(", ")}
+                    {t("providers.languages")}: {meta.supports.languages.join(", ")}
                   </p>
                 </section>
               </div>

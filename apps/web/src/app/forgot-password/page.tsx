@@ -1,9 +1,11 @@
 import type { Metadata } from "next"
+import { getTranslations } from "next-intl/server"
 import { ForgotPasswordForm } from "@/components/features/auth/ForgotPasswordForm"
 
 export const metadata: Metadata = { title: "Forgot Password" }
 
-export default function ForgotPasswordPage() {
+export default async function ForgotPasswordPage() {
+  const t = await getTranslations("auth")
   return (
     <main className="min-h-screen bg-[var(--color-surface-1)] flex items-center justify-center p-4">
       <div className="w-full max-w-[400px]">
@@ -12,7 +14,7 @@ export default function ForgotPasswordPage() {
             Demo<br />
             <span style={{ color: "var(--color-accent)" }}>Voice Studio</span>
           </h1>
-          <p className="text-caption text-[var(--color-text-muted)] mt-2">Reset your password</p>
+          <p className="text-caption text-[var(--color-text-muted)] mt-2">{t("resetPasswordSubtitle")}</p>
         </div>
 
         <div

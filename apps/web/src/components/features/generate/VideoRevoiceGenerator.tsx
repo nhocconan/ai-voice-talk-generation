@@ -1,11 +1,13 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
+import { useTranslations } from "next-intl"
 import { trpc } from "@/lib/trpc/client"
 import { parseTimedScript } from "@/lib/timed-script"
 import { ProfileSelector } from "./ProfileSelector"
 import { ProviderSelector } from "./ProviderSelector"
 import { GenerationProgress } from "./GenerationProgress"
+import { EstimatedCost } from "./EstimatedCost"
 import { FilmIcon, SubtitlesIcon, UploadCloudIcon } from "lucide-react"
 
 const ACCEPTED_VIDEO = "video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.mov,.webm,.mkv"
@@ -19,6 +21,7 @@ function formatBytes(n: number): string {
 }
 
 export function VideoRevoiceGenerator() {
+  const t = useTranslations("generate")
   const [fileName, setFileName] = useState<string | null>(null)
   const [fileSize, setFileSize] = useState<number>(0)
   const [storageKey, setStorageKey] = useState("")
@@ -52,7 +55,7 @@ export function VideoRevoiceGenerator() {
   async function handleFile(file: File) {
     setUploadError(null)
     if (file.size > MAX_BYTES) {
-      setUploadError("Video exceeds the 1 GB limit.")
+      setUploadError(t("videoExceeds"))
       return
     }
     setUploading(true)
@@ -72,7 +75,7 @@ export function VideoRevoiceGenerator() {
       if (!resp.ok) throw new Error(`Upload failed (HTTP ${resp.status})`)
       setStorageKey(nextKey)
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : "Upload failed")
+      setUploadError(err instanceof Error ? err.message : t("uploadFailed"))
       setStorageKey("")
       setFileName(null)
     } finally {
@@ -108,7 +111,7 @@ export function VideoRevoiceGenerator() {
         speakers,
       })
     } catch (err) {
-      setParseError(err instanceof Error ? err.message : "Timed script is invalid")
+      setParseError(err instanceof Error ? err.message : t("invalidTimedScript"))
     }
   }
 
@@ -127,7 +130,7 @@ export function VideoRevoiceGenerator() {
         style={{ boxShadow: "var(--shadow-outline-ring), var(--shadow-soft-lift)" }}
       >
         <div className="flex items-baseline justify-between mb-4">
-          <h2 className="text-display-card">1 · Source video</h2>
+          <h2 className="text-display-card">1 · {t("sourceVideo")}</h2>
           <span className="text-micro text-[var(--color-text-muted)]">MP4 · MOV · WebM · MKV · ≤ 1 GB</span>
         </div>
 
@@ -157,7 +160,7 @@ export function VideoRevoiceGenerator() {
               <div>
                 <p className="text-body-med text-[var(--color-text-primary)]">{fileName}</p>
                 <p className="text-micro text-[var(--color-text-muted)] mt-1">
-                  {formatBytes(fileSize)} uploaded · ready to re-voice
+                  {t("videoReady", { size: formatBytes(fileSize) })}
                 </p>
               </div>
               <button
@@ -170,7 +173,7 @@ export function VideoRevoiceGenerator() {
                 }}
                 className="text-micro text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] underline"
               >
-                Replace
+                {t("replace")}
               </button>
             </>
           ) : (
@@ -178,14 +181,14 @@ export function VideoRevoiceGenerator() {
               <UploadCloudIcon size={32} className="text-[var(--color-text-muted)]" aria-hidden />
               <div>
                 <p className="text-body-ui text-[var(--color-text-primary)]">
-                  Drop a video here, or click to browse
+                  {t("dropVideo")}
                 </p>
                 <p className="text-micro text-[var(--color-text-muted)] mt-1">
-                  NotebookLM Audio Overview MP4 exports work out of the box.
+                  {t("notebookLmHint")}
                 </p>
               </div>
               {uploading && (
-                <p className="text-micro text-[var(--color-accent)]">Uploading {fileName}…</p>
+                <p className="text-micro text-[var(--color-accent)]">{t("uploadingFile", { name: fileName ?? "" })}</p>
               )}
             </>
           )}
@@ -211,21 +214,21 @@ export function VideoRevoiceGenerator() {
         style={{ boxShadow: "var(--shadow-outline-ring), var(--shadow-soft-lift)" }}
       >
         <div className="flex items-baseline justify-between mb-4">
-          <h2 className="text-display-card">2 · Assign voices</h2>
+          <h2 className="text-display-card">2 · {t("assignVoices")}</h2>
           <span className="text-micro text-[var(--color-text-muted)]">
-            Match each speaker label in your transcript to a cloned profile.
+            {t("matchSpeakers")}
           </span>
         </div>
         <div className="grid gap-5 lg:grid-cols-2">
           <div>
             <label className="block text-caption mb-2">
-              Speaker A <span className="text-[var(--color-text-muted)]">(host)</span>
+              {t("speakerA")} <span className="text-[var(--color-text-muted)]">{t("hostLabel")}</span>
             </label>
             <ProfileSelector selected={profileAId} onSelect={setProfileAId} />
           </div>
           <div>
             <label className="block text-caption mb-2">
-              Speaker B <span className="text-[var(--color-text-muted)]">(guest — optional)</span>
+              {t("speakerB")} <span className="text-[var(--color-text-muted)]">{t("guestOptional")}</span>
             </label>
             <ProfileSelector selected={profileBId} onSelect={setProfileBId} exclude={profileAId ? [profileAId] : []} />
           </div>
@@ -237,11 +240,11 @@ export function VideoRevoiceGenerator() {
         className="bg-[var(--color-surface-0)] rounded-[var(--radius-card)] p-6"
         style={{ boxShadow: "var(--shadow-outline-ring), var(--shadow-soft-lift)" }}
       >
-        <h2 className="text-display-card mb-4">3 · Provider</h2>
+        <h2 className="text-display-card mb-4">3 · {t("provider")}</h2>
         <ProviderSelector
           value={providerId}
           onChange={setProviderId}
-          description="VieNeu / VoxCPM excel at Vietnamese; xAI Grok TTS and Xiaomi MiMo handle long-form English best."
+          description={t("videoProviderHint")}
         />
       </section>
 
@@ -251,23 +254,22 @@ export function VideoRevoiceGenerator() {
         style={{ boxShadow: "var(--shadow-outline-ring), var(--shadow-soft-lift)" }}
       >
         <div className="flex items-baseline justify-between mb-4">
-          <h2 className="text-display-card">4 · Aligned transcript</h2>
+          <h2 className="text-display-card">4 · {t("alignedTranscript")}</h2>
           <span className="text-micro text-[var(--color-text-muted)]">
-            <code className="font-mono">[MM:SS A] text</code> per line
+            {t("perLineHint")}
           </span>
         </div>
         <textarea
           value={script}
           onChange={(e) => setScript(e.target.value)}
           rows={12}
-          placeholder="[00:00 A] Welcome to today's episode.&#10;[00:06 B] Thanks for having me."
+          placeholder={t("videoScriptPlaceholder")}
           className="w-full px-3 py-2.5 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui font-mono text-sm leading-relaxed resize-y"
           style={{ minHeight: "220px" }}
-          aria-label="Aligned transcript"
+          aria-label={t("alignedTranscript")}
         />
         <p className="text-micro text-[var(--color-text-muted)] mt-2">
-          Tip: run the audio re-voice flow on the extracted track first — it gives you a diarized
-          baseline you can paste and refine here.
+          {t("diarizeTip")}
         </p>
 
         <label className="mt-5 flex items-center gap-3 cursor-pointer select-none">
@@ -278,7 +280,7 @@ export function VideoRevoiceGenerator() {
             className="h-4 w-4 rounded border-[var(--color-border)] text-[var(--color-accent)]"
           />
           <SubtitlesIcon size={16} className="text-[var(--color-text-muted)]" aria-hidden />
-          <span className="text-body-ui">Burn captions into the output video</span>
+          <span className="text-body-ui">{t("burnCaptions")}</span>
         </label>
       </section>
 
@@ -288,15 +290,18 @@ export function VideoRevoiceGenerator() {
       )}
 
       <div className="flex items-center justify-between gap-3">
-        <p className="text-micro text-[var(--color-text-muted)]">
-          Estimated length: <strong className="text-[var(--color-text-primary)]">{estimatedMinutes.toFixed(1)} min</strong>
-        </p>
+        <div className="min-w-0">
+          <p className="text-micro text-[var(--color-text-muted)]">
+            {t("estimatedLength")} <strong className="text-[var(--color-text-primary)]">{estimatedMinutes.toFixed(1)} {t("minShort")}</strong>
+          </p>
+          <EstimatedCost providerId={providerId} minutes={estimatedMinutes} />
+        </div>
         <button
           type="submit"
           disabled={submitDisabled}
-          className="h-10 px-6 rounded-[var(--radius-pill)] bg-black text-white text-button disabled:opacity-50 hover:opacity-90 transition-opacity"
+          className="h-10 px-6 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button disabled:opacity-50 hover:opacity-90 transition-opacity"
         >
-          {submitMutation.isPending ? "Queueing…" : "Re-voice video"}
+          {submitMutation.isPending ? t("queueing") : t("reVoiceVideoBtn")}
         </button>
       </div>
     </form>

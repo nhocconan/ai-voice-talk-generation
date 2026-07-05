@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
+import { useTranslations } from "next-intl"
 import { api } from "@/lib/trpc/client"
 
 const schema = z.object({
@@ -19,6 +20,7 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>
 
 export function ResetPasswordForm() {
+  const t = useTranslations("auth")
   const router = useRouter()
   const searchParams = useSearchParams()
   const token = searchParams.get("token") ?? ""
@@ -38,8 +40,8 @@ export function ResetPasswordForm() {
   if (!token) {
     return (
       <p className="text-body-ui text-[var(--color-danger)]">
-        Invalid or missing reset token.{" "}
-        <Link href="/forgot-password" className="text-[var(--color-accent)] hover:underline">Request a new one.</Link>
+        {t("invalidToken")}{" "}
+        <Link href="/forgot-password" className="text-[var(--color-accent)] hover:underline">{t("requestNewToken")}</Link>
       </p>
     )
   }
@@ -47,7 +49,7 @@ export function ResetPasswordForm() {
   if (done) {
     return (
       <p className="text-body-ui text-[var(--color-text-primary)] text-center">
-        Password updated. Redirecting to sign in…
+        {t("passwordUpdated")}
       </p>
     )
   }
@@ -55,7 +57,7 @@ export function ResetPasswordForm() {
   return (
     <form onSubmit={handleSubmit((data) => resetPassword.mutate({ token, password: data.password }))} className="space-y-4">
       <div>
-        <label htmlFor="password" className="block text-caption mb-1.5">New password</label>
+        <label htmlFor="password" className="block text-caption mb-1.5">{t("newPasswordLabel")}</label>
         <input
           id="password"
           type="password"
@@ -67,7 +69,7 @@ export function ResetPasswordForm() {
       </div>
 
       <div>
-        <label htmlFor="confirm" className="block text-caption mb-1.5">Confirm password</label>
+        <label htmlFor="confirm" className="block text-caption mb-1.5">{t("confirmPasswordLabel")}</label>
         <input
           id="confirm"
           type="password"
@@ -87,9 +89,9 @@ export function ResetPasswordForm() {
       <button
         type="submit"
         disabled={resetPassword.isPending}
-        className="w-full h-10 rounded-[var(--radius-pill)] bg-black text-white text-button disabled:opacity-50 hover:opacity-90 transition-opacity"
+        className="w-full h-10 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button disabled:opacity-50 hover:opacity-90 transition-opacity"
       >
-        {resetPassword.isPending ? "Saving…" : "Set new password"}
+        {resetPassword.isPending ? t("saving") : t("setNewPassword")}
       </button>
     </form>
   )

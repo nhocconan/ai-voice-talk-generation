@@ -2,12 +2,13 @@ import type { Metadata } from "next"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { marked } from "marked"
+import { getTranslations } from "next-intl/server"
 
 export const metadata: Metadata = { title: "Admin — Help" }
 
 export const dynamic = "force-static"
 
-async function loadManual(): Promise<string> {
+async function loadManual(t: Awaited<ReturnType<typeof getTranslations>>): Promise<string> {
   const candidates = [
     path.resolve(process.cwd(), "../../docs/ADMIN_MANUAL.md"),
     path.resolve(process.cwd(), "../../../docs/ADMIN_MANUAL.md"),
@@ -20,18 +21,19 @@ async function loadManual(): Promise<string> {
       // try next
     }
   }
-  return "# Admin Manual\n\nSource file not found at runtime. See `docs/ADMIN_MANUAL.md` in the repository."
+  return `# ${t("manualFallbackHeading")}\n\n${t("manualFallbackBody")}`
 }
 
 export default async function AdminHelpPage() {
-  const md = await loadManual()
+  const t = await getTranslations("adminHelp")
+  const md = await loadManual(t)
   const html = await marked.parse(md, { gfm: true, breaks: false })
   return (
     <div className="max-w-4xl space-y-6">
       <div>
-        <h1 className="text-display-card">Administrator Help</h1>
+        <h1 className="text-display-card">{t("title")}</h1>
         <p className="text-body text-[var(--color-text-secondary)] mt-1">
-          Full administrator manual. Also available in the repo at <code>docs/ADMIN_MANUAL.md</code>.
+          {t("intro")} <code>docs/ADMIN_MANUAL.md</code>.
         </p>
       </div>
       <article

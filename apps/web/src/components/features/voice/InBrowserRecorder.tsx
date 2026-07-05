@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import { MicIcon, StopCircleIcon, CheckCircleIcon, AlertCircleIcon } from "lucide-react"
+import { useTranslations } from "next-intl"
 import { trpc } from "@/lib/trpc/client"
 import { WaveformVisualizer } from "./WaveformVisualizer"
 
@@ -24,6 +25,7 @@ const MIN_DURATION_MS = 5000
 const MAX_DURATION_MS = 60000
 
 export function InBrowserRecorder({ prompts, profileId, onComplete }: Props) {
+  const t = useTranslations("voices")
   const [current, setCurrent] = useState(0)
   const [state, setState] = useState<RecordState>("idle")
   const [clips, setClips] = useState<RecordedClip[]>([])
@@ -71,7 +73,7 @@ export function InBrowserRecorder({ prompts, profileId, onComplete }: Props) {
         if (mediaRecorderRef.current?.state === "recording") stopRecording()
       }, MAX_DURATION_MS)
     } catch {
-      setError("Microphone access denied. Please allow microphone in your browser.")
+      setError(t("micDenied"))
     }
   }
 
@@ -85,7 +87,7 @@ export function InBrowserRecorder({ prompts, profileId, onComplete }: Props) {
     mr.onstop = () => {
       const duration = Date.now() - startTimeRef.current
       if (duration < MIN_DURATION_MS) {
-        setError(`Recording too short (${(duration / 1000).toFixed(1)}s). Need at least 5s.`)
+        setError(t("recordingTooShort", { seconds: (duration / 1000).toFixed(1) }))
         setState("idle")
         return
       }
@@ -120,7 +122,7 @@ export function InBrowserRecorder({ prompts, profileId, onComplete }: Props) {
         setState("idle")
       }
     } catch {
-      setError("Upload failed. Please try again.")
+      setError(t("uploadFailedRetry"))
       setState("reviewing")
     }
   }
@@ -136,7 +138,7 @@ export function InBrowserRecorder({ prompts, profileId, onComplete }: Props) {
     <div className="space-y-6">
       <div>
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-micro text-[var(--color-text-muted)]">PROMPT {current + 1} OF {Math.min(5, prompts.length)}</span>
+          <span className="text-micro text-[var(--color-text-muted)]">{t("promptCounter", { current: current + 1, total: Math.min(5, prompts.length) })}</span>
           {Array.from({ length: Math.min(5, prompts.length) }).map((_, i) => (
             <div
               key={i}
@@ -158,14 +160,14 @@ export function InBrowserRecorder({ prompts, profileId, onComplete }: Props) {
         <div className="space-y-3">
           <audio controls src={latestClip.url} className="w-full h-10" />
           <p className="text-caption text-[var(--color-text-muted)]">
-            Duration: {(latestClip.durationMs / 1000).toFixed(1)}s — sounds good?
+            {t("clipDuration", { seconds: (latestClip.durationMs / 1000).toFixed(1) })}
           </p>
           <div className="flex gap-2">
-            <button onClick={acceptClip} className="flex items-center gap-2 h-9 px-4 rounded-[var(--radius-pill)] bg-black text-white text-button hover:opacity-90">
-              <CheckCircleIcon size={15} /> Accept
+            <button onClick={acceptClip} className="flex items-center gap-2 h-9 px-4 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button hover:opacity-90">
+              <CheckCircleIcon size={15} /> {t("accept")}
             </button>
             <button onClick={reRecord} className="h-9 px-4 rounded-[var(--radius-pill)] border border-[var(--color-border)] text-button hover:bg-[var(--color-surface-1)]">
-              Re-record
+              {t("reRecord")}
             </button>
           </div>
         </div>
@@ -185,7 +187,7 @@ export function InBrowserRecorder({ prompts, profileId, onComplete }: Props) {
           style={{ background: "var(--color-surface-warm-tr,var(--color-surface-warm))", boxShadow: "var(--shadow-warm-lift)" }}
         >
           <MicIcon size={18} style={{ color: "var(--color-accent)" }} />
-          Start Recording
+          {t("startRecording")}
         </button>
       )}
 
@@ -195,12 +197,12 @@ export function InBrowserRecorder({ prompts, profileId, onComplete }: Props) {
           className="flex items-center gap-2 h-12 px-6 rounded-[var(--radius-pill)] bg-[var(--color-accent)] text-white text-body-med animate-pulse"
         >
           <StopCircleIcon size={18} />
-          Stop Recording
+          {t("stopRecording")}
         </button>
       )}
 
       {state === "uploading" && (
-        <p className="text-caption text-[var(--color-text-muted)]">Uploading and processing…</p>
+        <p className="text-caption text-[var(--color-text-muted)]">{t("uploadingProcessing")}</p>
       )}
     </div>
   )

@@ -42,7 +42,7 @@ export function ProfileSelector({ selected, onSelect, value, onChange, exclude =
             className={cn(
               "flex items-center gap-3 p-3 rounded-[var(--radius-md)] border text-left transition-colors",
               currentValue === p.id
-                ? "border-black bg-[var(--color-surface-1)]"
+                ? "border-[var(--color-emphasis)] bg-[var(--color-surface-1)]"
                 : "border-[var(--color-border)] hover:bg-[var(--color-surface-1)]",
             )}
           >
@@ -55,7 +55,7 @@ export function ProfileSelector({ selected, onSelect, value, onChange, exclude =
                 {p.lang.toUpperCase()} {latestScore !== undefined ? `· ${latestScore}/100` : ""}
               </div>
             </div>
-            {currentValue === p.id && <div className="w-2 h-2 rounded-full bg-black shrink-0" />}
+            {currentValue === p.id && <div className="w-2 h-2 rounded-full bg-[var(--color-emphasis)] shrink-0" />}
           </button>
         )
       })}

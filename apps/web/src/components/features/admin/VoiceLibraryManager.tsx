@@ -1,10 +1,12 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { trpc } from "@/lib/trpc/client"
 import { QualityBadge } from "@/components/features/voice/QualityBadge"
 
 export function VoiceLibraryManager() {
+  const t = useTranslations("admin")
   const utils = trpc.useUtils()
   const { data: profiles, isLoading } = trpc.voiceProfile.list.useQuery()
   const setOrgShared = trpc.voiceProfile.setOrgShared.useMutation({
@@ -21,7 +23,7 @@ export function VoiceLibraryManager() {
   ) ?? []
 
   if (isLoading) {
-    return <p className="text-body text-[var(--color-text-muted)]">Loading...</p>
+    return <p className="text-body text-[var(--color-text-muted)]">{t("voiceLibrary.loading")}</p>
   }
 
   return (
@@ -31,21 +33,29 @@ export function VoiceLibraryManager() {
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name or owner…"
+          placeholder={t("voiceLibrary.searchPlaceholder")}
           className="w-72 px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui"
         />
-        <span className="text-caption text-[var(--color-text-muted)]">{filtered.length} profile(s)</span>
+        <span className="text-caption text-[var(--color-text-muted)]">{t("voiceLibrary.profileCount", { count: filtered.length })}</span>
       </div>
 
       <div
         className="rounded-[var(--radius-card)] overflow-hidden"
         style={{ border: "1px solid var(--color-border)" }}
       >
-        <table className="w-full text-left">
+        <div className="overflow-x-auto"><table className="w-full text-left">
           <thead className="bg-[var(--color-surface-1)]">
             <tr>
-              {["Name", "Owner", "Lang", "Quality", "Org Shared", "Locked", "Actions"].map((h) => (
-                <th key={h} className="px-4 py-3 text-caption text-[var(--color-text-secondary)]">{h}</th>
+              {[
+                { key: "name", label: t("voiceLibrary.colName") },
+                { key: "owner", label: t("voiceLibrary.colOwner") },
+                { key: "lang", label: t("voiceLibrary.colLang") },
+                { key: "quality", label: t("voiceLibrary.colQuality") },
+                { key: "orgShared", label: t("voiceLibrary.colOrgShared") },
+                { key: "locked", label: t("voiceLibrary.colLocked") },
+                { key: "actions", label: t("voiceLibrary.colActions") },
+              ].map((h) => (
+                <th key={h.key} className="px-4 py-3 text-caption text-[var(--color-text-secondary)]">{h.label}</th>
               ))}
             </tr>
           </thead>
@@ -53,7 +63,7 @@ export function VoiceLibraryManager() {
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-body text-[var(--color-text-muted)]">
-                  No voice profiles found.
+                  {t("voiceLibrary.empty")}
                 </td>
               </tr>
             )}
@@ -85,10 +95,10 @@ export function VoiceLibraryManager() {
                       }`}
                       role="switch"
                       aria-checked={profile.isOrgShared}
-                      aria-label={`Toggle org-shared for ${profile.name}`}
+                      aria-label={t("voiceLibrary.toggleOrgSharedAria", { name: profile.name })}
                     >
                       <span
-                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition-transform ${
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-[var(--color-surface-0)] shadow ring-0 transition-transform ${
                           profile.isOrgShared ? "translate-x-4" : "translate-x-0"
                         }`}
                       />
@@ -103,10 +113,10 @@ export function VoiceLibraryManager() {
                       }`}
                       role="switch"
                       aria-checked={profile.isLocked}
-                      aria-label={`Toggle locked for ${profile.name}`}
+                      aria-label={t("voiceLibrary.toggleLockedAria", { name: profile.name })}
                     >
                       <span
-                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition-transform ${
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-[var(--color-surface-0)] shadow ring-0 transition-transform ${
                           profile.isLocked ? "translate-x-4" : "translate-x-0"
                         }`}
                       />
@@ -116,12 +126,12 @@ export function VoiceLibraryManager() {
                     <div className="flex items-center gap-2">
                       {profile.isOrgShared && (
                         <span className="text-micro px-2 py-0.5 rounded-full bg-[var(--color-accent)]18 text-[var(--color-accent)]">
-                          Shared
+                          {t("voiceLibrary.sharedBadge")}
                         </span>
                       )}
                       {profile.isLocked && (
                         <span className="text-micro px-2 py-0.5 rounded-full bg-[var(--color-warning)]18 text-[var(--color-warning)]">
-                          Locked
+                          {t("voiceLibrary.lockedBadge")}
                         </span>
                       )}
                     </div>
@@ -130,7 +140,7 @@ export function VoiceLibraryManager() {
               )
             })}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   )

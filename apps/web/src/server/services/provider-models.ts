@@ -78,6 +78,56 @@ async function xaiCatalog(apiKey: string): Promise<CatalogResult> {
   return { models, source: "remote" }
 }
 
+// LLM catalogs — all return kind=LLM models for the draft-script feature.
+
+async function geminiLlmCatalog(apiKey: string): Promise<CatalogResult> {
+  const data = (await fetchJson(
+    `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+  )) as { models?: Array<{ name?: string; displayName?: string; supportedGenerationMethods?: string[] }> }
+  const models = (data.models ?? [])
+    .filter((m) => (m.supportedGenerationMethods ?? []).some((s) => s.includes("generateContent")))
+    .map<CatalogModel>((m) => ({
+      modelId: (m.name ?? "").replace(/^models\//, ""),
+      displayName: m.displayName ?? m.name ?? "",
+      kind: "LLM",
+      languages: ["vi", "en"],
+    }))
+    .filter((m) => m.modelId)
+  return { models, source: "remote" }
+}
+
+async function openAiCompatCatalog(base: string, apiKey: string | null): Promise<CatalogResult> {
+  const headers: Record<string, string> = {}
+  if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`
+  const data = (await fetchJson(`${base.replace(/\/$/, "")}/models`, { headers })) as {
+    data?: Array<{ id?: string }>
+  }
+  const models = (data.data ?? [])
+    .filter((m) => m.id)
+    .map<CatalogModel>((m) => ({
+      modelId: m.id ?? "",
+      displayName: m.id ?? "",
+      kind: "LLM",
+      languages: ["en", "vi"],
+    }))
+  return { models, source: "remote" }
+}
+
+async function ollamaCatalog(base: string): Promise<CatalogResult> {
+  // Ollama's native tags endpoint lives at /api/tags (one level above the /v1 base).
+  const root = base.replace(/\/v1\/?$/, "").replace(/\/$/, "")
+  const data = (await fetchJson(`${root}/api/tags`)) as { models?: Array<{ name?: string }> }
+  const models = (data.models ?? [])
+    .filter((m) => m.name)
+    .map<CatalogModel>((m) => ({
+      modelId: m.name ?? "",
+      displayName: m.name ?? "",
+      kind: "LLM",
+      languages: ["en", "vi"],
+    }))
+  return { models, source: "remote" }
+}
+
 // Curated defaults for providers that don't have a public listing endpoint or
 // where a stable, opinionated catalog is more useful than the raw API output.
 const CURATED: Partial<Record<ProviderName, CatalogModel[]>> = {
@@ -115,16 +165,47 @@ const CURATED: Partial<Record<ProviderName, CatalogModel[]>> = {
       languages: ["en", "zh"],
     },
   ],
+  GEMINI_LLM: [
+    { modelId: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash", kind: "LLM", languages: ["vi", "en"] },
+    { modelId: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro", kind: "LLM", languages: ["vi", "en"] },
+  ],
+  GROQ: [
+    { modelId: "llama-3.3-70b-versatile", displayName: "Llama 3.3 70B Versatile", kind: "LLM", languages: ["en", "vi"] },
+    { modelId: "llama-3.1-8b-instant", displayName: "Llama 3.1 8B Instant", kind: "LLM", languages: ["en", "vi"] },
+  ],
+  XAI_LLM: [
+    { modelId: "grok-4.3", displayName: "Grok 4.3", kind: "LLM", languages: ["en", "vi"] },
+  ],
+  GROK_OAUTH: [
+    { modelId: "grok-4.3", displayName: "Grok 4.3", kind: "LLM", languages: ["en", "vi"] },
+  ],
+  OLLAMA: [
+    { modelId: "qwen2.5:7b", displayName: "Qwen 2.5 7B", kind: "LLM", languages: ["en", "vi", "zh"] },
+    { modelId: "llama3.1:8b", displayName: "Llama 3.1 8B", kind: "LLM", languages: ["en", "vi"] },
+  ],
 }
 
 export async function fetchProviderCatalog(
   name: ProviderName,
   apiKey: string | null,
+  config?: Record<string, unknown> | null,
 ): Promise<CatalogResult> {
+  const baseUrl = String(config?.["baseUrl"] ?? "").trim()
   try {
     if (name === "GEMINI_TTS" && apiKey) return await geminiCatalog(apiKey)
     if (name === "ELEVENLABS" && apiKey) return await elevenlabsCatalog(apiKey)
     if (name === "XAI_TTS" && apiKey) return await xaiCatalog(apiKey)
+    if (name === "GEMINI_LLM" && apiKey) return await geminiLlmCatalog(apiKey)
+    if (name === "GROQ" && apiKey) {
+      return await openAiCompatCatalog(baseUrl || "https://api.groq.com/openai/v1", apiKey)
+    }
+    if (name === "XAI_LLM" && apiKey) {
+      return await openAiCompatCatalog(baseUrl || "https://api.x.ai/v1", apiKey)
+    }
+    if (name === "OLLAMA") {
+      const ollamaBase = baseUrl !== "" ? baseUrl : (process.env["OLLAMA_BASE_URL"] ?? "http://localhost:11434/v1")
+      return await ollamaCatalog(ollamaBase)
+    }
   } catch {
     // Fall through to curated list when the remote API is unreachable.
   }

@@ -61,3 +61,4 @@ class VideoRevoiceJobPayload(WorkerPayload):
     source_video_key: str = Field(alias="sourceVideoKey")
     speakers: list[RenderSpeakerPayload] = Field(default_factory=list)
     captions: bool = True
+    preserve_music: bool = Field(default=False, alias="preserveMusic")

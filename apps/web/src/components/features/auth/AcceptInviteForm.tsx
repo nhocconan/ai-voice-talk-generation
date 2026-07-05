@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { useRouter } from "next/navigation"
 import { signIn } from "next-auth/react"
+import { useTranslations } from "next-intl"
 import { trpc } from "@/lib/trpc/client"
 
 const schema = z.object({
@@ -17,6 +18,7 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>
 
 export function AcceptInviteForm({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
+  const t = useTranslations("auth")
   const params = use(searchParams)
   const token = params.token ?? ""
   const router = useRouter()
@@ -45,15 +47,15 @@ export function AcceptInviteForm({ searchParams }: { searchParams: Promise<{ tok
       router.push("/dashboard")
       router.refresh()
     } catch (e) {
-      setServerError(e instanceof Error ? e.message : "An error occurred")
+      setServerError(e instanceof Error ? e.message : t("genericError"))
     }
   }
 
-  if (validating) return <p className="text-body-ui text-center">Validating invite…</p>
+  if (validating) return <p className="text-body-ui text-center">{t("validatingInvite")}</p>
   if (!tokenData?.valid) return (
     <div className="text-center">
-      <p className="text-body-ui text-[var(--color-danger)]">This invite is invalid or has expired.</p>
-      <p className="text-caption text-[var(--color-text-muted)] mt-2">Contact your admin for a new invite.</p>
+      <p className="text-body-ui text-[var(--color-danger)]">{t("inviteInvalid")}</p>
+      <p className="text-caption text-[var(--color-text-muted)] mt-2">{t("inviteInvalidHelp")}</p>
     </div>
   )
 
@@ -61,24 +63,24 @@ export function AcceptInviteForm({ searchParams }: { searchParams: Promise<{ tok
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div>
         <p className="text-caption text-[var(--color-text-muted)] mb-4">
-          Signing up as <strong>{tokenData.email}</strong>
+          {t("signingUpAs", { email: tokenData.email ?? "" })}
         </p>
       </div>
 
       <div>
-        <label htmlFor="name" className="block text-caption mb-1.5">Full Name</label>
+        <label htmlFor="name" className="block text-caption mb-1.5">{t("fullNameLabel")}</label>
         <input id="name" {...register("name")} className="w-full px-3 py-2.5 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui" />
         {errors.name && <p className="text-micro text-[var(--color-danger)] mt-1">{errors.name.message}</p>}
       </div>
 
       <div>
-        <label htmlFor="password" className="block text-caption mb-1.5">Password</label>
+        <label htmlFor="password" className="block text-caption mb-1.5">{t("passwordLabel")}</label>
         <input id="password" type="password" {...register("password")} className="w-full px-3 py-2.5 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui" />
         {errors.password && <p className="text-micro text-[var(--color-danger)] mt-1">{errors.password.message}</p>}
       </div>
 
       <div>
-        <label htmlFor="confirmPassword" className="block text-caption mb-1.5">Confirm Password</label>
+        <label htmlFor="confirmPassword" className="block text-caption mb-1.5">{t("confirmPasswordLabel")}</label>
         <input id="confirmPassword" type="password" {...register("confirmPassword")} className="w-full px-3 py-2.5 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui" />
         {errors.confirmPassword && <p className="text-micro text-[var(--color-danger)] mt-1">{errors.confirmPassword.message}</p>}
       </div>
@@ -87,8 +89,8 @@ export function AcceptInviteForm({ searchParams }: { searchParams: Promise<{ tok
         <div className="text-body-ui text-[var(--color-danger)] bg-[var(--color-accent-soft)] rounded-[var(--radius-md)] px-3 py-2">{serverError}</div>
       )}
 
-      <button type="submit" disabled={accept.isPending} className="w-full h-10 rounded-[var(--radius-pill)] bg-black text-white text-button disabled:opacity-50">
-        {accept.isPending ? "Creating account…" : "Create Account"}
+      <button type="submit" disabled={accept.isPending} className="w-full h-10 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button disabled:opacity-50">
+        {accept.isPending ? t("creatingAccount") : t("createAccount")}
       </button>
     </form>
   )

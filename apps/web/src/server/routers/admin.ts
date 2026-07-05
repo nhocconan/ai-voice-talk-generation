@@ -4,6 +4,17 @@ import { ModelKind, Prisma, Role } from "@prisma/client"
 import { TRPCError } from "@trpc/server"
 import { encryptApiKey, decryptApiKey } from "@/server/services/crypto"
 import { fetchProviderCatalog } from "@/server/services/provider-models"
+import {
+  generatePkce,
+  startDeviceAuth,
+  pollToken,
+  storeTokens,
+  stashVerifier,
+  takeVerifier,
+  clearVerifier,
+  clearTokens,
+  importRefreshTokenForProvider,
+} from "@/server/services/xai-oauth"
 
 const settingValueSchema = z.union([
   z.number().int().min(0),
@@ -185,7 +196,11 @@ export const adminRouter = router({
         where: { id: input.providerId },
       })
       const apiKey = provider.apiKeyEnc ? await decryptApiKey(provider.apiKeyEnc) : null
-      const result = await fetchProviderCatalog(provider.name, apiKey)
+      const providerConfig =
+        provider.config && typeof provider.config === "object" && !Array.isArray(provider.config)
+          ? (provider.config as Record<string, unknown>)
+          : {}
+      const result = await fetchProviderCatalog(provider.name, apiKey, providerConfig)
 
       const now = new Date()
       for (const m of result.models) {
@@ -270,6 +285,90 @@ export const adminRouter = router({
         targetId: input.id,
       })
     }),
+
+  // SuperGrok / X Premium+ OAuth (GROK_OAUTH provider) — device-code flow.
+  // startXaiOAuth kicks off a device authorization and stashes the PKCE verifier
+  // server-side keyed by device_code; pollXaiOAuth polls until the user approves
+  // and then stores the encrypted tokens into the GROK_OAUTH ProviderConfig.
+  startXaiOAuth: superAdminProcedure.mutation(async ({ ctx }) => {
+    const { verifier, challenge } = generatePkce()
+    const device = await startDeviceAuth(challenge)
+    stashVerifier(device.device_code, verifier, device.expires_in ?? 600)
+    await ctx.audit({
+      actorId: ctx.session.user.id,
+      action: "admin.startXaiOAuth",
+      targetType: "ProviderConfig",
+      targetId: "GROK_OAUTH",
+    })
+    return {
+      deviceCode: device.device_code,
+      userCode: device.user_code,
+      verificationUri: device.verification_uri,
+      verificationUriComplete: device.verification_uri_complete ?? device.verification_uri,
+      interval: device.interval ?? 5,
+      expiresIn: device.expires_in ?? 600,
+    }
+  }),
+
+  pollXaiOAuth: superAdminProcedure
+    .input(z.object({ deviceCode: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const verifier = takeVerifier(input.deviceCode)
+      if (!verifier) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Device code expired. Start again." })
+      }
+      const result = await pollToken(input.deviceCode, verifier)
+      if ("pending" in result) return { connected: false }
+
+      const provider = await ctx.db.providerConfig.findUniqueOrThrow({
+        where: { name: "GROK_OAUTH" },
+      })
+      await storeTokens(provider.id, result)
+      clearVerifier(input.deviceCode)
+      await ctx.audit({
+        actorId: ctx.session.user.id,
+        action: "admin.connectXaiOAuth",
+        targetType: "ProviderConfig",
+        targetId: provider.id,
+      })
+      return { connected: true }
+    }),
+
+  // Import an existing SuperGrok token (raw refresh_token or a Hermes/OpenClaw
+  // JSON config). Validated with one live refresh before storing.
+  importXaiOAuthToken: superAdminProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const provider = await ctx.db.providerConfig.findUniqueOrThrow({
+        where: { name: "GROK_OAUTH" },
+      })
+      try {
+        await importRefreshTokenForProvider(provider.id, input.token)
+      } catch (e) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `Could not import token: ${String(e)}` })
+      }
+      await ctx.audit({
+        actorId: ctx.session.user.id,
+        action: "admin.importXaiOAuthToken",
+        targetType: "ProviderConfig",
+        targetId: provider.id,
+      })
+      return { connected: true }
+    }),
+
+  disconnectXaiOAuth: superAdminProcedure.mutation(async ({ ctx }) => {
+    const provider = await ctx.db.providerConfig.findUniqueOrThrow({
+      where: { name: "GROK_OAUTH" },
+    })
+    await clearTokens(provider.id)
+    await ctx.audit({
+      actorId: ctx.session.user.id,
+      action: "admin.disconnectXaiOAuth",
+      targetType: "ProviderConfig",
+      targetId: provider.id,
+    })
+    return { connected: false }
+  }),
 
   // Audit log
   auditLog: adminProcedure

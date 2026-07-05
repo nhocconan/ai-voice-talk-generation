@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type { Session } from "next-auth"
 import { signOut } from "next-auth/react"
+import { useTranslations } from "next-intl"
 import {
   LayoutDashboardIcon, MicIcon, PlayCircleIcon, HistoryIcon,
   UsersIcon, SettingsIcon, LogOutIcon, MenuIcon, XIcon, AudioLinesIcon,
@@ -11,24 +12,26 @@ import {
 } from "lucide-react"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
+import { ThemeToggle } from "./ThemeToggle"
+import { LanguageSwitcher } from "./LanguageSwitcher"
 
 const appNav = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboardIcon },
-  { href: "/voices", label: "Voice Profiles", icon: MicIcon },
-  { href: "/generate", label: "Generate", icon: AudioLinesIcon },
-  { href: "/history", label: "History", icon: HistoryIcon },
-]
+  { href: "/dashboard", key: "dashboard", icon: LayoutDashboardIcon },
+  { href: "/voices", key: "voices", icon: MicIcon },
+  { href: "/generate", key: "generate", icon: AudioLinesIcon },
+  { href: "/history", key: "history", icon: HistoryIcon },
+] as const
 
 const adminNav = [
-  { href: "/admin/users", label: "Users", icon: UsersIcon },
-  { href: "/admin/providers", label: "Providers", icon: SettingsIcon },
-  { href: "/admin/library", label: "Voice Library", icon: MicIcon },
-  { href: "/admin/generations", label: "Generations", icon: PlayCircleIcon },
-  { href: "/admin/audit", label: "Audit Log", icon: HistoryIcon },
-  { href: "/admin/system-health", label: "System Health", icon: ActivityIcon },
-  { href: "/admin/settings", label: "Settings", icon: SettingsIcon },
-  { href: "/admin/help", label: "Help / Manual", icon: HelpCircleIcon },
-]
+  { href: "/admin/users", key: "navUsers", icon: UsersIcon },
+  { href: "/admin/providers", key: "navProviders", icon: SettingsIcon },
+  { href: "/admin/library", key: "library", icon: MicIcon },
+  { href: "/admin/generations", key: "generations", icon: PlayCircleIcon },
+  { href: "/admin/audit", key: "audit", icon: HistoryIcon },
+  { href: "/admin/system-health", key: "navSystemHealth", icon: ActivityIcon },
+  { href: "/admin/settings", key: "navSettings", icon: SettingsIcon },
+  { href: "/admin/help", key: "help", icon: HelpCircleIcon },
+] as const
 
 interface Props {
   children: React.ReactNode
@@ -38,6 +41,8 @@ interface Props {
 export function AppShell({ children, session }: Props) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const tNav = useTranslations("nav")
+  const tAdmin = useTranslations("admin")
   const isAdmin = session.user.role === "ADMIN" || session.user.role === "SUPER_ADMIN"
 
   return (
@@ -59,21 +64,30 @@ export function AppShell({ children, session }: Props) {
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
-          {appNav.map(({ href, label, icon: Icon }) => (
-            <NavItem key={href} href={href} label={label} icon={<Icon size={16} />} active={pathname.startsWith(href)} onClick={() => setMobileOpen(false)} />
+          {appNav.map(({ href, key, icon: Icon }) => (
+            <NavItem key={href} href={href} label={tNav(key)} icon={<Icon size={16} />} active={pathname.startsWith(href)} onClick={() => setMobileOpen(false)} />
           ))}
 
           {isAdmin && (
             <>
               <div className="pt-4 pb-1 px-3">
-                <span className="text-micro text-[var(--color-text-muted)] uppercase tracking-widest">Admin</span>
+                <span className="text-micro text-[var(--color-text-muted)] uppercase tracking-widest">{tNav("admin")}</span>
               </div>
-              {adminNav.map(({ href, label, icon: Icon }) => (
-                <NavItem key={href} href={href} label={label} icon={<Icon size={16} />} active={pathname.startsWith(href)} onClick={() => setMobileOpen(false)} />
+              {adminNav.map(({ href, key, icon: Icon }) => (
+                <NavItem key={href} href={href} label={tAdmin(key)} icon={<Icon size={16} />} active={pathname.startsWith(href)} onClick={() => setMobileOpen(false)} />
               ))}
             </>
           )}
         </nav>
+
+        {/* Theme + language controls */}
+        <div
+          className="flex items-center justify-between gap-2 px-3 py-3"
+          style={{ borderTop: "1px solid var(--color-border)" }}
+        >
+          <LanguageSwitcher />
+          <ThemeToggle />
+        </div>
 
         {/* User footer */}
         <div className="px-3 py-4" style={{ borderTop: "1px solid var(--color-border)" }}>
@@ -91,14 +105,14 @@ export function AppShell({ children, session }: Props) {
             className="flex w-full items-center gap-2 px-3 py-2 rounded-[var(--radius-md)] text-caption text-[var(--color-text-muted)] hover:bg-[var(--color-surface-1)] hover:text-[var(--color-text-primary)] transition-colors"
           >
             <LogOutIcon size={14} />
-            Sign out
+            {tNav("logout")}
           </button>
         </div>
       </aside>
 
       {/* Mobile overlay */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-[var(--z-overlay)] bg-black/20 lg:hidden" onClick={() => setMobileOpen(false)} />
+        <div className="fixed inset-0 z-[var(--z-overlay)] bg-black/30 lg:hidden" onClick={() => setMobileOpen(false)} />
       )}
 
       {/* Main */}
@@ -116,6 +130,10 @@ export function AppShell({ children, session }: Props) {
             {mobileOpen ? <XIcon size={18} /> : <MenuIcon size={18} />}
           </button>
           <span className="ml-3 text-nav">Voice Studio</span>
+          <div className="ml-auto flex items-center gap-2">
+            <LanguageSwitcher />
+            <ThemeToggle />
+          </div>
         </header>
 
         <main className="p-6 lg:p-8 max-w-5xl">

@@ -8,9 +8,15 @@ import {
 } from "@/server/queue/producers"
 import { generatePresignedGetUrl, generatePresignedPutUrl } from "@/server/services/storage"
 import { db } from "@/server/db/client"
-import { GenKind, GenStatus } from "@prisma/client"
+import { GenKind, GenStatus, ProviderName } from "@prisma/client"
 import { randomBytes, randomUUID } from "crypto"
 import { checkFixedWindowLimit } from "@/server/services/rate-limit"
+import { draftScriptWithProvider } from "@/server/services/llm"
+
+// Gemini text model for script drafting / transcript conversion. Overridable via
+// env so operators can bump it without a code change. Defaults to 2.5-flash
+// (GA, stronger than the old 2.0-flash for Vietnamese long-form drafting).
+const GEMINI_TEXT_MODEL = process.env["GEMINI_TEXT_MODEL"] ?? "gemini-2.5-flash"
 
 const INPUT_GENERATION_MINUTES_CAP = 12 * 60
 // P3-08: 10 render starts per user per minute
@@ -38,14 +44,40 @@ const speakerSchema = z.object({
 
 export const generationRouter = router({
   listAvailableProviders: protectedProcedure.query(async ({ ctx }) => {
+    // Only TTS-capable providers belong in the voice/audio picker. The LLM-only
+    // providers (script drafting) are excluded so enabling one — e.g. Groq —
+    // never wrongly appears as a TTS provider and breaks audio generation.
     return ctx.db.providerConfig.findMany({
-      where: { enabled: true },
+      where: { enabled: true, name: { notIn: LLM_PROVIDER_NAMES } },
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
       select: {
         id: true,
         name: true,
         isDefault: true,
         config: true,
+      },
+    })
+  }),
+
+  // Enabled LLM providers (with their enabled LLM models) for the draft-script
+  // model picker. Only providers that have at least one enabled LLM model appear.
+  listLlmProviders: protectedProcedure.query(async ({ ctx }) => {
+    return ctx.db.providerConfig.findMany({
+      where: {
+        enabled: true,
+        name: { in: LLM_PROVIDER_NAMES },
+        models: { some: { kind: "LLM", enabled: true } },
+      },
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        isDefault: true,
+        models: {
+          where: { kind: "LLM", enabled: true },
+          orderBy: [{ isDefault: "desc" }, { modelId: "asc" }],
+          select: { id: true, modelId: true, displayName: true, isDefault: true },
+        },
       },
     })
   }),
@@ -471,20 +503,17 @@ export const generationRouter = router({
       await ctx.audit({ actorId: ctx.session.user.id, action: "generation.delete", targetType: "Generation", targetId: input.id })
     }),
 
-  // P3-01: Draft script via Gemini
+  // P3-01: Draft script via a selected LLM provider (falls back to env Gemini)
   draftScript: protectedProcedure
     .input(z.object({
       topic: z.string().min(3).max(500),
       minutes: z.number().min(0.5).max(30),
       tone: z.enum(["professional", "conversational", "educational", "storytelling"]).default("professional"),
       lang: z.enum(["vi", "en"]).default("vi"),
+      providerId: z.string().optional(),
+      model: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const apiKey = process.env["GOOGLE_API_KEY"]
-      if (!apiKey) {
-        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Gemini API key not configured" })
-      }
-
       const wordCount = Math.round(input.minutes * 130)
       const toneMap = {
         professional: "professional and clear",
@@ -497,29 +526,56 @@ export const generationRouter = router({
         ? `Viết một kịch bản thuyết trình bằng tiếng Việt về chủ đề: "${input.topic}". Giọng điệu ${toneMap[input.tone]}. Độ dài khoảng ${wordCount} từ (tương đương ${input.minutes} phút khi đọc). Chỉ trả về văn bản kịch bản, không có tiêu đề hay chú thích.`
         : `Write a presentation script in English on the topic: "${input.topic}". Tone: ${toneMap[input.tone]}. Length: approximately ${wordCount} words (equivalent to ${input.minutes} minutes when read aloud). Return only the script text, no headings or annotations.`
 
-      const resp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
-          }),
-        },
-      )
+      // 1/2: selected or default enabled LLM provider (with an enabled LLM model).
+      const llm = await resolveLlmProvider(ctx.db, input.providerId, input.model)
 
-      if (!resp.ok) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Gemini API error" })
+      let script: string
+      let providerLabel: string
+      if (llm) {
+        try {
+          script = await draftScriptWithProvider({
+            providerName: llm.providerName,
+            providerId: llm.providerId,
+            apiKeyEnc: llm.apiKeyEnc,
+            config: llm.config,
+            model: llm.model,
+            prompt,
+          })
+        } catch (e) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Draft failed: ${String(e)}` })
+        }
+        providerLabel = llm.providerName
+      } else {
+        // 3: backward-compatible fallback to env Gemini so nothing breaks when no
+        // LLM provider is configured.
+        const apiKey = process.env["GOOGLE_API_KEY"]
+        if (!apiKey) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No LLM provider configured and Gemini API key not set" })
+        }
+        const resp = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
+            }),
+          },
+        )
+        if (!resp.ok) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Gemini API error" })
+        }
+        const data = await resp.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
+        if (!text) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Empty response from Gemini" })
+        script = text.trim()
+        providerLabel = "GEMINI_ENV"
       }
 
-      const data = await resp.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
-      if (!text) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Empty response from Gemini" })
+      await ctx.audit({ actorId: ctx.session.user.id, action: "generation.draftScript", targetType: "User", targetId: ctx.session.user.id, meta: { topic: input.topic, minutes: input.minutes, provider: providerLabel } })
 
-      await ctx.audit({ actorId: ctx.session.user.id, action: "generation.draftScript", targetType: "User", targetId: ctx.session.user.id, meta: { topic: input.topic, minutes: input.minutes } })
-
-      return { script: text.trim() }
+      return { script }
     }),
 
   // Flow 5.2: 15-second preview before full render
@@ -581,7 +637,7 @@ Transcript:
 ${input.transcript}`
 
       const resp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -646,6 +702,75 @@ async function enforceGenerationLimit(
       code: "BAD_REQUEST",
       message: `Generation length exceeds the configured limit of ${maxMinutes} minutes`,
     })
+  }
+}
+
+const LLM_PROVIDER_NAMES: ProviderName[] = [
+  ProviderName.GEMINI_LLM,
+  ProviderName.GROQ,
+  ProviderName.XAI_LLM,
+  ProviderName.GROK_OAUTH,
+  ProviderName.OLLAMA,
+]
+
+interface ResolvedLlm {
+  providerName: ProviderName
+  providerId: string
+  apiKeyEnc: string | null
+  config: Record<string, unknown>
+  model: string
+}
+
+// Pick the LLM provider + model for draftScript. Returns null when no LLM
+// provider is configured so the caller can fall back to env Gemini.
+async function resolveLlmProvider(
+  prisma: typeof db,
+  providerId: string | undefined,
+  model: string | undefined,
+): Promise<ResolvedLlm | null> {
+  const provider = providerId
+    ? await prisma.providerConfig.findFirst({ where: { id: providerId, enabled: true } })
+    : await prisma.providerConfig.findFirst({
+        where: {
+          enabled: true,
+          name: { in: LLM_PROVIDER_NAMES },
+          models: { some: { kind: "LLM", enabled: true } },
+        },
+        orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+      })
+
+  if (!provider) {
+    if (providerId) throw new TRPCError({ code: "BAD_REQUEST", message: "LLM provider not available" })
+    return null
+  }
+  if (!LLM_PROVIDER_NAMES.includes(provider.name)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: `${provider.name} is not an LLM provider` })
+  }
+
+  const config =
+    provider.config && typeof provider.config === "object" && !Array.isArray(provider.config)
+      ? (provider.config as Record<string, unknown>)
+      : {}
+
+  let resolvedModel = model
+  if (!resolvedModel) {
+    const defaultModel = await prisma.providerModel.findFirst({
+      where: { providerId: provider.id, kind: "LLM", enabled: true },
+      orderBy: [{ isDefault: "desc" }, { modelId: "asc" }],
+      select: { modelId: true },
+    })
+    resolvedModel = defaultModel?.modelId ?? (typeof config["model"] === "string" ? config["model"] : undefined)
+  }
+  if (!resolvedModel) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: `No LLM model configured for ${provider.name}` })
+  }
+
+  return {
+    providerName: provider.name,
+    providerId: provider.id,
+    apiKeyEnc: provider.apiKeyEnc,
+    config,
+    model: resolvedModel,
   }
 }
 

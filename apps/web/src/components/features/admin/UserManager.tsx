@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { trpc } from "@/lib/trpc/client"
 import { Role } from "@prisma/client"
 import { PlusIcon, ShieldIcon } from "lucide-react"
@@ -20,6 +21,7 @@ interface EditableUserState {
 }
 
 export function UserManager() {
+  const t = useTranslations("admin")
   const [showInvite, setShowInvite] = useState(false)
   const [search, setSearch] = useState("")
   const [drafts, setDrafts] = useState<Record<string, EditableUserState>>({})
@@ -72,14 +74,14 @@ export function UserManager() {
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name or email…"
+          placeholder={t("users.searchPlaceholder")}
           className="flex-1 max-w-xs px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui"
         />
         <button
           onClick={() => setShowInvite(!showInvite)}
-          className="flex items-center gap-2 h-9 px-4 rounded-[var(--radius-pill)] bg-black text-white text-button hover:opacity-90"
+          className="flex items-center gap-2 h-9 px-4 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button hover:opacity-90"
         >
-          <PlusIcon size={14} /> Invite
+          <PlusIcon size={14} /> {t("users.invite")}
         </button>
       </div>
 
@@ -89,10 +91,10 @@ export function UserManager() {
           className="p-5 rounded-[var(--radius-card)] bg-[var(--color-surface-0)]"
           style={{ boxShadow: "var(--shadow-outline-ring), var(--shadow-soft-lift)" }}
         >
-          <h3 className="text-body-med mb-4">Invite User</h3>
+          <h3 className="text-body-med mb-4">{t("users.inviteUser")}</h3>
           <form onSubmit={handleSubmit(onInvite)} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
-              <input {...register("name")} placeholder="Full Name" className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui" />
+              <input {...register("name")} placeholder={t("users.fullNamePlaceholder")} className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui" />
               {errors.name && <p className="text-micro text-[var(--color-danger)] mt-1">{errors.name.message}</p>}
             </div>
             <div>
@@ -100,12 +102,12 @@ export function UserManager() {
               {errors.email && <p className="text-micro text-[var(--color-danger)] mt-1">{errors.email.message}</p>}
             </div>
             <div className="flex gap-2">
-              <select {...register("role")} className="flex-1 px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui bg-white">
-                <option value={Role.USER}>User</option>
-                <option value={Role.ADMIN}>Admin</option>
+              <select {...register("role")} className="flex-1 px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui bg-[var(--color-surface-0)]">
+                <option value={Role.USER}>{t("users.roleUser")}</option>
+                <option value={Role.ADMIN}>{t("users.roleAdmin")}</option>
               </select>
-              <button type="submit" disabled={createInvite.isPending} className="h-9 px-4 rounded-[var(--radius-pill)] bg-black text-white text-button disabled:opacity-50">
-                {createInvite.isPending ? "…" : "Send"}
+              <button type="submit" disabled={createInvite.isPending} className="h-9 px-4 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button disabled:opacity-50">
+                {createInvite.isPending ? "…" : t("users.send")}
               </button>
             </div>
           </form>
@@ -117,14 +119,14 @@ export function UserManager() {
         className="rounded-[var(--radius-card)] overflow-hidden"
         style={{ border: "1px solid var(--color-border)" }}
       >
-        <table className="w-full">
+        <div className="overflow-x-auto"><table className="w-full">
           <thead style={{ borderBottom: "1px solid var(--color-border)", background: "var(--color-surface-1)" }}>
             <tr>
-              <th className="px-4 py-3 text-left text-caption text-[var(--color-text-muted)]">User</th>
-              <th className="px-4 py-3 text-left text-caption text-[var(--color-text-muted)]">Role</th>
-              <th className="px-4 py-3 text-left text-caption text-[var(--color-text-muted)]">Quota</th>
-              <th className="px-4 py-3 text-left text-caption text-[var(--color-text-muted)]">Status</th>
-              <th className="px-4 py-3 text-right text-caption text-[var(--color-text-muted)]">Actions</th>
+              <th className="px-4 py-3 text-left text-caption text-[var(--color-text-muted)]">{t("users.colUser")}</th>
+              <th className="px-4 py-3 text-left text-caption text-[var(--color-text-muted)]">{t("users.colRole")}</th>
+              <th className="px-4 py-3 text-left text-caption text-[var(--color-text-muted)]">{t("users.colQuota")}</th>
+              <th className="px-4 py-3 text-left text-caption text-[var(--color-text-muted)]">{t("users.colStatus")}</th>
+              <th className="px-4 py-3 text-right text-caption text-[var(--color-text-muted)]">{t("users.colActions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -147,7 +149,7 @@ export function UserManager() {
                       <select
                         value={draft.role}
                         onChange={(event) => updateDraft(user.id, { role: event.target.value as Role })}
-                        className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-2 py-1 text-small"
+                        className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-0)] px-2 py-1 text-small"
                       >
                         <option value={Role.USER}>USER</option>
                         <option value={Role.ADMIN}>ADMIN</option>
@@ -164,12 +166,12 @@ export function UserManager() {
                         onChange={(event) => updateDraft(user.id, { quotaMinutes: Number(event.target.value) })}
                         className="w-24 rounded-[var(--radius-md)] border border-[var(--color-border)] px-2 py-1 text-body-ui"
                       />
-                      <span className="text-caption text-[var(--color-text-muted)]">used {user.usedMinutes}</span>
+                      <span className="text-caption text-[var(--color-text-muted)]">{t("users.usedMinutes", { n: user.usedMinutes })}</span>
                     </div>
                   </td>
                   <td className="px-4 py-3">
                     <span className={`text-micro ${user.active ? "text-[var(--color-success)]" : "text-[var(--color-danger)]"}`}>
-                      {user.active ? "Active" : "Inactive"}
+                      {user.active ? t("users.active") : t("users.inactive")}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -178,14 +180,14 @@ export function UserManager() {
                         onClick={() => updateUser.mutate({ id: user.id, active: !user.active })}
                         className="text-caption text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] underline"
                       >
-                        {user.active ? "Deactivate" : "Activate"}
+                        {user.active ? t("users.deactivate") : t("users.activate")}
                       </button>
                       <button
                         onClick={() => updateUser.mutate({ id: user.id, role: draft.role, quotaMinutes: draft.quotaMinutes })}
                         disabled={!hasChanges || updateUser.isPending}
                         className="text-caption text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] underline disabled:opacity-40"
                       >
-                        Save
+                        {t("users.save")}
                       </button>
                     </div>
                   </td>
@@ -193,7 +195,7 @@ export function UserManager() {
               )
             })}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   )

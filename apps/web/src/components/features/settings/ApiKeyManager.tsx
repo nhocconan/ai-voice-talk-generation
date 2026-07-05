@@ -1,10 +1,12 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { trpc } from "@/lib/trpc/client"
 import { KeyIcon, PlusIcon, TrashIcon, CopyIcon, CheckIcon } from "lucide-react"
 
 export function ApiKeyManager() {
+  const t = useTranslations("settings")
   const utils = trpc.useUtils()
   const { data: keys, isLoading } = trpc.apiKey.list.useQuery()
   const createMutation = trpc.apiKey.create.useMutation({
@@ -43,7 +45,7 @@ export function ApiKeyManager() {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <KeyIcon size={18} className="text-[var(--color-text-muted)]" />
-          <h2 className="font-semibold text-[var(--color-text-primary)]">API Keys</h2>
+          <h2 className="font-semibold text-[var(--color-text-primary)]">{t("apiKeys")}</h2>
         </div>
         <button
           onClick={() => {
@@ -53,21 +55,21 @@ export function ApiKeyManager() {
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-[var(--radius-btn)] bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity"
         >
           <PlusIcon size={14} />
-          New key
+          {t("newKey")}
         </button>
       </div>
 
       {newKey && (
-        <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200">
-          <p className="text-xs text-green-700 mb-1 font-medium">
-            Copy this key now — it won&apos;t be shown again.
+        <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 dark:bg-emerald-400/10 dark:border-emerald-400/30">
+          <p className="text-xs text-[var(--color-success)] mb-1 font-medium">
+            {t("copyKeyNow")}
           </p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 font-mono text-xs bg-white border border-green-200 rounded px-2 py-1 truncate">
+            <code className="flex-1 font-mono text-xs bg-[var(--color-surface-0)] border border-green-200 dark:border-emerald-400/30 rounded px-2 py-1 truncate">
               {newKey}
             </code>
-            <button onClick={copyKey} className="shrink-0 p-1.5 rounded hover:bg-green-100">
-              {copied ? <CheckIcon size={14} className="text-green-600" /> : <CopyIcon size={14} className="text-green-600" />}
+            <button onClick={copyKey} className="shrink-0 p-1.5 rounded hover:bg-green-100 dark:hover:bg-emerald-400/20">
+              {copied ? <CheckIcon size={14} className="text-[var(--color-success)]" /> : <CopyIcon size={14} className="text-[var(--color-success)]" />}
             </button>
           </div>
         </div>
@@ -77,19 +79,19 @@ export function ApiKeyManager() {
         <div className="mb-4 p-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] space-y-3">
           <div>
             <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-              Key name
+              {t("keyName")}
             </label>
             <input
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="e.g. CI pipeline"
+              placeholder={t("keyNamePlaceholder")}
               className="w-full rounded px-3 py-1.5 text-sm border border-[var(--color-border)] bg-[var(--color-surface-0)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
             />
           </div>
           <div>
             <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-              Expires in days (optional)
+              {t("expiresInDays")}
             </label>
             <input
               type="number"
@@ -97,7 +99,7 @@ export function ApiKeyManager() {
               max={365}
               value={expiresInDays ?? ""}
               onChange={(e) => setExpiresInDays(e.target.value ? Number(e.target.value) : undefined)}
-              placeholder="Never"
+              placeholder={t("never")}
               className="w-full rounded px-3 py-1.5 text-sm border border-[var(--color-border)] bg-[var(--color-surface-0)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
             />
           </div>
@@ -106,14 +108,14 @@ export function ApiKeyManager() {
               onClick={() => setShowCreate(false)}
               className="px-3 py-1.5 text-sm rounded-[var(--radius-btn)] border border-[var(--color-border)] hover:bg-[var(--color-surface-0)] transition-colors"
             >
-              Cancel
+              {t("cancel")}
             </button>
             <button
               disabled={!newName.trim() || createMutation.isPending}
               onClick={() => createMutation.mutate({ name: newName.trim(), expiresInDays })}
               className="px-3 py-1.5 text-sm rounded-[var(--radius-btn)] bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
             >
-              {createMutation.isPending ? "Creating…" : "Create"}
+              {createMutation.isPending ? t("creating") : t("create")}
             </button>
           </div>
         </div>
@@ -127,16 +129,16 @@ export function ApiKeyManager() {
         </div>
       ) : !keys?.length ? (
         <p className="text-sm text-[var(--color-text-muted)] py-4 text-center">
-          No API keys yet. Create one to access the REST API.
+          {t("emptyState")}
         </p>
       ) : (
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto"><table className="w-full text-sm">
           <thead>
             <tr className="text-xs text-[var(--color-text-muted)] border-b border-[var(--color-border)]">
-              <th className="text-left pb-2">Name</th>
-              <th className="text-left pb-2">Prefix</th>
-              <th className="text-left pb-2">Last used</th>
-              <th className="text-left pb-2">Expires</th>
+              <th className="text-left pb-2">{t("tableName")}</th>
+              <th className="text-left pb-2">{t("tablePrefix")}</th>
+              <th className="text-left pb-2">{t("tableLastUsed")}</th>
+              <th className="text-left pb-2">{t("tableExpires")}</th>
               <th className="pb-2" />
             </tr>
           </thead>
@@ -146,20 +148,20 @@ export function ApiKeyManager() {
                 <td className="py-2.5 font-medium text-[var(--color-text-primary)]">{key.name}</td>
                 <td className="py-2.5 font-mono text-xs text-[var(--color-text-muted)]">{key.prefix}…</td>
                 <td className="py-2.5 text-[var(--color-text-muted)]">
-                  {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleDateString() : "Never"}
+                  {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleDateString() : t("never")}
                 </td>
                 <td className="py-2.5 text-[var(--color-text-muted)]">
-                  {key.expiresAt ? new Date(key.expiresAt).toLocaleDateString() : "Never"}
+                  {key.expiresAt ? new Date(key.expiresAt).toLocaleDateString() : t("never")}
                 </td>
                 <td className="py-2.5 text-right">
                   <button
                     onClick={() => {
-                      if (confirm("Revoke this key?")) {
+                      if (confirm(t("revokeConfirm"))) {
                         revokeMutation.mutate({ id: key.id })
                       }
                     }}
-                    className="p-1 rounded hover:bg-red-50 text-red-500 transition-colors"
-                    title="Revoke"
+                    className="p-1 rounded hover:bg-[var(--color-accent-soft)] text-[var(--color-danger)] transition-colors"
+                    title={t("revoke")}
                   >
                     <TrashIcon size={14} />
                   </button>
@@ -167,7 +169,7 @@ export function ApiKeyManager() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
     </div>
   )

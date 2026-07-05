@@ -1,5 +1,6 @@
 "use client"
 
+import { useLocale } from "next-intl"
 import { trpc } from "@/lib/trpc/client"
 import { getProviderMeta } from "@/lib/providers-meta"
 
@@ -16,6 +17,7 @@ export function ProviderSelector({
   label = "Provider",
   description = "Leave empty to use the current admin default provider.",
 }: ProviderSelectorProps) {
+  const locale = useLocale()
   const { data: providers, isLoading } = trpc.generation.listAvailableProviders.useQuery()
 
   if (isLoading) {
@@ -28,11 +30,11 @@ export function ProviderSelector({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-3 py-2 text-body-ui"
+        className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-0)] px-3 py-2 text-body-ui"
       >
         <option value="">Use default provider</option>
         {providers?.map((provider) => {
-          const meta = getProviderMeta(provider.name)
+          const meta = getProviderMeta(provider.name, locale)
           return (
             <option key={provider.id} value={provider.id}>
               {meta?.shortName ?? provider.name}

@@ -408,6 +408,7 @@ async def handle_video_revoice(job_name: str, data: object) -> None:
                 captions=data.captions,
                 progress_fn=progress,
                 result_fn=_db_render_result,
+                preserve_music=data.preserve_music,
             )
 
             RENDERS_TOTAL.labels(status="success", provider=provider_name).inc()
@@ -567,6 +568,43 @@ async def preview_audio(req: PreviewRequest):
     except Exception as exc:
         logger.error("Preview failed", error=str(exc))
         return JSONResponse(status_code=500, content={"error": str(exc)})
+
+
+class UrlIngestRequest(_BaseModel):
+    url: str
+
+
+@app.post("/ingest-url")
+async def ingest_url(req: UrlIngestRequest):
+    """Download a public URL's audio (yt-dlp) and stash it for the ASR flow.
+
+    Admin-gated via ALLOW_URL_INGEST. Returns the MinIO key of the extracted WAV;
+    the web tier then enqueues the existing ASR + diarization job against it.
+    """
+    import tempfile
+    import uuid
+    from pathlib import Path
+
+    from fastapi.responses import JSONResponse
+
+    if not settings.allow_url_ingest:
+        return JSONResponse(
+            status_code=403,
+            content={"error": "URL ingest is disabled. Set ALLOW_URL_INGEST=true to enable."},
+        )
+
+    from .pipelines.url_ingest import download_audio
+    from .services.storage import upload_object
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            wav = await download_audio(req.url, Path(tmp))
+            source_key = f"url-ingest/{uuid.uuid4()}.wav"
+            await asyncio.to_thread(upload_object, wav, source_key, "audio/wav")
+    except Exception as exc:
+        logger.error("URL ingest failed", error=str(exc))
+        return JSONResponse(status_code=500, content={"error": str(exc)})
+    return {"key": source_key}
 
 
 if __name__ == "__main__":

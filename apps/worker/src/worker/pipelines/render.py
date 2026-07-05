@@ -13,13 +13,23 @@ import soundfile as sf
 
 from ..audio.io import encode_mp3, encode_wav_24bit, get_duration_ms
 from ..audio.stitch import stitch_segments
+from ..config import settings
 from ..logging import get_logger
 from ..providers.base import TTSProvider, VoiceRef
 from ..services.storage import download_object, upload_object
+from ..text import normalize_vietnamese
 
 logger = get_logger("pipeline.render")
 
 SAMPLE_RATE = 24000
+
+
+def prepare_tts_text(text: str, lang: str) -> str:
+    """Normalize text just before synthesis. For Vietnamese, expands numbers /
+    dates / currency to spoken form so the engine reads them naturally."""
+    if lang == "vi" and settings.vi_normalize:
+        return normalize_vietnamese(text)
+    return text
 
 
 ChapterEntry = dict  # {title: str, start_ms: int, end_ms: int}
@@ -111,11 +121,15 @@ async def run_render(
                 for c in chapters
             ]
             audiogram_path = tmp_dir / "audiogram.mp4"
+            audiogram_lang = speakers[0].get("lang", "vi") if speakers else "vi"
             await render_audiogram(
                 audio_path=output_wav,
                 out_path=audiogram_path,
                 segments=audiogram_segments,
                 title=audiogram_title,
+                word_captions=settings.audiogram_word_captions,
+                caption_preset=settings.caption_preset,
+                lang=audiogram_lang,
             )
             video_key = f"renders/{generation_id}/audiogram.mp4"
             await asyncio.to_thread(upload_object, audiogram_path, video_key, "video/mp4")
@@ -143,10 +157,12 @@ async def _render_presentation(
     generation_id: str,
     pacing_lock: bool = False,
 ) -> Path:
+    lang = speaker.get("lang", "vi")
     script: str = speaker.get("script") or "\n".join(
         seg["text"] for seg in speaker.get("segments", [])
     )
-    chunks = _chunk_text(script, provider.max_chunk_chars, lang=speaker.get("lang", "vi"))
+    script = prepare_tts_text(script, lang)
+    chunks = _chunk_text(script, provider.max_chunk_chars, lang=lang)
     logger.info("Chunked script", chunks=len(chunks))
 
     segment_wavs: list[Path] = []
@@ -201,7 +217,7 @@ async def _render_podcast(
         progress = 0.1 + (i / total) * 0.7
         await progress_fn(generation_id, progress, f"Speaker {label}: segment {i + 1}/{total}")
 
-        audio_bytes = await provider.synthesize(text, voice_ref, lang)
+        audio_bytes = await provider.synthesize(prepare_tts_text(text, lang), voice_ref, lang)
         seg_path = tmp_dir / f"seg_{i:04d}_{label}.wav"
         _bytes_to_wav(audio_bytes, seg_path)
         segment_wavs.append(seg_path)

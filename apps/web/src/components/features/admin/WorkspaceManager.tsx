@@ -1,10 +1,12 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { trpc } from "@/lib/trpc/client"
 import { BuildingIcon, PlusIcon, TrashIcon } from "lucide-react"
 
 export function WorkspaceManager() {
+  const t = useTranslations("admin")
   const utils = trpc.useUtils()
   const { data: workspaces, isLoading } = trpc.workspace.list.useQuery()
   const createMutation = trpc.workspace.create.useMutation({
@@ -29,7 +31,7 @@ export function WorkspaceManager() {
     try {
       await createMutation.mutateAsync({ name: form.name.trim(), slug: form.slug.trim(), plan: form.plan as "free" | "pro" | "enterprise" })
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to create workspace")
+      setError(e instanceof Error ? e.message : t("workspaces.createFailed"))
     }
   }
 
@@ -41,23 +43,23 @@ export function WorkspaceManager() {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <BuildingIcon size={18} className="text-[var(--color-text-muted)]" />
-          <h2 className="font-semibold text-[var(--color-text-primary)]">Workspaces</h2>
+          <h2 className="font-semibold text-[var(--color-text-primary)]">{t("workspaces.title")}</h2>
         </div>
         <button
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-[var(--radius-btn)] bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity"
         >
           <PlusIcon size={14} />
-          New workspace
+          {t("workspaces.newWorkspace")}
         </button>
       </div>
 
       {showCreate && (
         <div className="mb-4 p-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] space-y-3">
-          {error && <p className="text-xs text-red-600">{error}</p>}
-          <div className="grid grid-cols-2 gap-3">
+          {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">Name</label>
+              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">{t("workspaces.nameLabel")}</label>
               <input
                 type="text"
                 value={form.name}
@@ -67,7 +69,7 @@ export function WorkspaceManager() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">Slug</label>
+              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">{t("workspaces.slugLabel")}</label>
               <input
                 type="text"
                 value={form.slug}
@@ -78,15 +80,15 @@ export function WorkspaceManager() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">Plan</label>
+            <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">{t("workspaces.planLabel")}</label>
             <select
               value={form.plan}
               onChange={(e) => setForm({ ...form, plan: e.target.value })}
               className="w-full rounded px-3 py-1.5 text-sm border border-[var(--color-border)] bg-[var(--color-surface-0)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
             >
-              <option value="free">Free</option>
-              <option value="pro">Pro</option>
-              <option value="enterprise">Enterprise</option>
+              <option value="free">{t("workspaces.planFree")}</option>
+              <option value="pro">{t("workspaces.planPro")}</option>
+              <option value="enterprise">{t("workspaces.planEnterprise")}</option>
             </select>
           </div>
           <div className="flex gap-2 justify-end">
@@ -97,14 +99,14 @@ export function WorkspaceManager() {
               }}
               className="px-3 py-1.5 text-sm rounded-[var(--radius-btn)] border border-[var(--color-border)] hover:bg-[var(--color-surface-0)] transition-colors"
             >
-              Cancel
+              {t("workspaces.cancel")}
             </button>
             <button
               disabled={!form.name.trim() || !form.slug.trim() || createMutation.isPending}
               onClick={handleCreate}
               className="px-3 py-1.5 text-sm rounded-[var(--radius-btn)] bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
             >
-              {createMutation.isPending ? "Creating…" : "Create"}
+              {createMutation.isPending ? t("workspaces.creating") : t("workspaces.create")}
             </button>
           </div>
         </div>
@@ -117,15 +119,15 @@ export function WorkspaceManager() {
           ))}
         </div>
       ) : !workspaces?.length ? (
-        <p className="text-sm text-[var(--color-text-muted)] py-4 text-center">No workspaces yet.</p>
+        <p className="text-sm text-[var(--color-text-muted)] py-4 text-center">{t("workspaces.empty")}</p>
       ) : (
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto"><table className="w-full text-sm">
           <thead>
             <tr className="text-xs text-[var(--color-text-muted)] border-b border-[var(--color-border)]">
-              <th className="text-left pb-2">Name</th>
-              <th className="text-left pb-2">Slug</th>
-              <th className="text-left pb-2">Plan</th>
-              <th className="text-left pb-2">Created</th>
+              <th className="text-left pb-2">{t("workspaces.colName")}</th>
+              <th className="text-left pb-2">{t("workspaces.colSlug")}</th>
+              <th className="text-left pb-2">{t("workspaces.colPlan")}</th>
+              <th className="text-left pb-2">{t("workspaces.colCreated")}</th>
               <th className="pb-2" />
             </tr>
           </thead>
@@ -141,12 +143,12 @@ export function WorkspaceManager() {
                 <td className="py-2.5 text-right">
                   <button
                     onClick={() => {
-                      if (confirm(`Delete workspace "${ws.name}"?`)) {
+                      if (confirm(t("workspaces.deleteConfirm", { name: ws.name }))) {
                         deleteMutation.mutate({ id: ws.id })
                       }
                     }}
-                    className="p-1 rounded hover:bg-red-50 text-red-500 transition-colors"
-                    title="Delete"
+                    className="p-1 rounded hover:bg-[var(--color-accent-soft)] text-[var(--color-danger)] transition-colors"
+                    title={t("workspaces.delete")}
                   >
                     <TrashIcon size={14} />
                   </button>
@@ -154,7 +156,7 @@ export function WorkspaceManager() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
     </div>
   )

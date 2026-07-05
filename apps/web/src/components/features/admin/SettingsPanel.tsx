@@ -1,65 +1,68 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { trpc } from "@/lib/trpc/client"
 
 const EDITABLE_SETTINGS = [
   {
     key: "retention.renderDays",
-    label: "Render Retention (days)",
+    labelKey: "settings.renderRetentionLabel",
     type: "number" as const,
-    description: "Whole days only. Use 1 or more days for automatic cleanup.",
+    descriptionKey: "settings.renderRetentionDesc",
   },
   {
     key: "quota.defaultMinutes",
-    label: "Default User Quota (min)",
+    labelKey: "settings.defaultQuotaLabel",
     type: "number" as const,
-    description: "Whole minutes only. Zero is allowed for restricted tenants.",
+    descriptionKey: "settings.defaultQuotaDesc",
   },
   {
     key: "generation.maxMinutes",
-    label: "Max Generation Length (min)",
+    labelKey: "settings.maxGenerationLabel",
     type: "number" as const,
-    description: "Whole minutes only. Must be at least 1 minute.",
+    descriptionKey: "settings.maxGenerationDesc",
   },
   {
     key: "branding.accentHex",
-    label: "Accent Colour (hex)",
+    labelKey: "settings.accentColourLabel",
     type: "text" as const,
-    description: "Use a full 6-digit hex code such as #0F766E.",
+    descriptionKey: "settings.accentColourDesc",
   },
-]
+] as const
 
 type EditableSettingKey = (typeof EDITABLE_SETTINGS)[number]["key"]
 
-function validateSetting(key: EditableSettingKey, rawValue: string) {
+type TranslateFn = (key: string, values?: Record<string, string | number>) => string
+
+function validateSetting(t: TranslateFn, key: EditableSettingKey, rawValue: string) {
   const trimmed = rawValue.trim()
 
   switch (key) {
     case "retention.renderDays": {
       const parsed = Number(trimmed)
-      if (!trimmed) return "Retention days is required."
-      if (!Number.isInteger(parsed)) return "Retention days must be a whole number."
-      if (parsed < 1) return "Retention days must be at least 1."
+      if (!trimmed) return t("settings.retentionRequired")
+      if (!Number.isInteger(parsed)) return t("settings.retentionInteger")
+      if (parsed < 1) return t("settings.retentionMin")
       return null
     }
     case "quota.defaultMinutes": {
       const parsed = Number(trimmed)
-      if (!trimmed) return "Default quota is required."
-      if (!Number.isInteger(parsed)) return "Default quota must be a whole number."
-      if (parsed < 0) return "Default quota cannot be negative."
+      if (!trimmed) return t("settings.quotaRequired")
+      if (!Number.isInteger(parsed)) return t("settings.quotaInteger")
+      if (parsed < 0) return t("settings.quotaNonNegative")
       return null
     }
     case "generation.maxMinutes": {
       const parsed = Number(trimmed)
-      if (!trimmed) return "Maximum generation length is required."
-      if (!Number.isInteger(parsed)) return "Maximum generation length must be a whole number."
-      if (parsed < 1) return "Maximum generation length must be at least 1 minute."
+      if (!trimmed) return t("settings.maxGenRequired")
+      if (!Number.isInteger(parsed)) return t("settings.maxGenInteger")
+      if (parsed < 1) return t("settings.maxGenMin")
       return null
     }
     case "branding.accentHex":
-      if (!trimmed) return "Accent colour is required."
-      if (!/^#[0-9A-Fa-f]{6}$/.test(trimmed)) return "Accent colour must match #RRGGBB."
+      if (!trimmed) return t("settings.accentRequired")
+      if (!/^#[0-9A-Fa-f]{6}$/.test(trimmed)) return t("settings.accentFormat")
       return null
   }
 }
@@ -73,6 +76,7 @@ function parseSettingValue(key: EditableSettingKey, rawValue: string) {
 }
 
 export function SettingsPanel() {
+  const t = useTranslations("admin")
   const { data: settings, refetch } = trpc.admin.getSettings.useQuery()
   const update = trpc.admin.updateSetting.useMutation({ onSuccess: () => refetch() })
   const [editing, setEditing] = useState<EditableSettingKey | null>(null)
@@ -85,10 +89,12 @@ export function SettingsPanel() {
       className="bg-[var(--color-surface-0)] rounded-[var(--radius-card)] divide-y divide-[var(--color-border)]"
       style={{ boxShadow: "var(--shadow-outline-ring), var(--shadow-soft-lift)" }}
     >
-      {EDITABLE_SETTINGS.map(({ key, label, type, description }) => {
+      {EDITABLE_SETTINGS.map(({ key, labelKey, type, descriptionKey }) => {
+        const label = t(labelKey)
+        const description = t(descriptionKey)
         const current = settings[key]
         const isEditing = editing === key
-        const validationError = isEditing ? validateSetting(key, value) : null
+        const validationError = isEditing ? validateSetting(t, key, value) : null
         const accentValue = String(isEditing ? value : current ?? "").trim().toUpperCase()
         const showAccentPreview = key === "branding.accentHex" && /^#[0-9A-Fa-f]{6}$/.test(accentValue)
 
@@ -136,7 +142,7 @@ export function SettingsPanel() {
                     <div className="flex items-center gap-3">
                       <button
                         onClick={async () => {
-                          const nextError = validateSetting(key, value)
+                          const nextError = validateSetting(t, key, value)
                           if (nextError) return
 
                           update.reset()
@@ -150,9 +156,9 @@ export function SettingsPanel() {
                           }
                         }}
                         disabled={update.isPending || Boolean(validationError)}
-                        className="h-9 px-3 rounded-[var(--radius-pill)] bg-black text-white text-caption disabled:opacity-40"
+                        className="h-9 px-3 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-caption disabled:opacity-40"
                       >
-                        Save
+                        {t("settings.save")}
                       </button>
                       <button
                         onClick={() => {
@@ -162,7 +168,7 @@ export function SettingsPanel() {
                         }}
                         className="text-caption text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
                       >
-                        Cancel
+                        {t("settings.cancel")}
                       </button>
                     </div>
                   </div>
@@ -185,7 +191,7 @@ export function SettingsPanel() {
                     }}
                     className="text-caption text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] underline"
                   >
-                    Edit
+                    {t("settings.edit")}
                   </button>
                 </div>
               )}

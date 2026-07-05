@@ -90,21 +90,43 @@ async def render_audiogram(
     size: int = 1080,
     background_hex: str = "#0B0B0F",
     wave_hex: str = "#7FFFFF",
+    word_captions: bool = False,
+    caption_preset: str = "pop",
+    lang: str | None = None,
 ) -> Path:
     """Render an audiogram MP4 from ``audio_path``. Returns ``out_path``.
 
-    Uses ffmpeg's ``showwaves`` for the live waveform and burns ASS captions for
-    the transcript so the result is a single self-contained video file.
+    Uses ffmpeg's ``showwaves`` for the live waveform and burns captions for the
+    transcript so the result is a single self-contained video file. When
+    ``word_captions`` is set, the audio is aligned to word-level timing and the
+    captions animate word-by-word (the modern "active word" look); otherwise the
+    supplied segment/chapter captions are burned.
     """
     segments = segments or []
     ass_path = out_path.with_suffix(".ass")
-    write_ass(segments, ass_path, title=title, play_res_x=size, play_res_y=size)
+
+    wrote_word_captions = False
+    if word_captions:
+        wrote_word_captions = await _write_word_captions(
+            audio_path, ass_path, size=size, preset=caption_preset, lang=lang
+        )
+    if not wrote_word_captions:
+        write_ass(segments, ass_path, title=title, play_res_x=size, play_res_y=size)
 
     # showwaves draws the waveform; we composite it on top of a solid background.
     # The cyan wave color matches the design tokens accent palette.
     bg = background_hex.lstrip("#")
     wv = wave_hex.lstrip("#")
     caption_chain = _subtitle_filter_chain(ass_path)
+    if not caption_chain and ass_path.exists():
+        # Captions were prepared but this ffmpeg build can't burn them. Make the
+        # loss loud + actionable instead of silently shipping a caption-less video.
+        logger.warning(
+            "Captions skipped: this ffmpeg build lacks libass (no `ass`/`subtitles` "
+            "filter). Install a full build — on macOS run `brew install ffmpeg` — to "
+            "burn the transcript/word captions.",
+            out=str(out_path),
+        )
     # `color` without an explicit duration produces frames indefinitely; the
     # `-shortest` flag at output time bounds it to the audio length. An
     # earlier `d=1` here capped the whole video at 1 second.
@@ -156,6 +178,40 @@ async def render_audiogram(
         )
 
     return out_path
+
+
+async def _write_word_captions(
+    audio_path: Path,
+    ass_path: Path,
+    *,
+    size: int,
+    preset: str,
+    lang: str | None,
+) -> bool:
+    """Align the audio to words and write an animated karaoke ASS. Best-effort:
+    returns False (so the caller falls back to segment captions) on any failure."""
+    try:
+        from .align import align_words
+        from .captions import group_words_into_lines, write_karaoke_ass
+
+        words = await asyncio.to_thread(align_words, audio_path, language=lang)
+        if not words:
+            return False
+        lines = group_words_into_lines(words)
+        write_karaoke_ass(
+            lines,
+            ass_path,
+            preset=preset,
+            play_res_x=size,
+            play_res_y=size,
+            font_size=max(48, size // 18),
+            margin_v=size // 8,
+        )
+        logger.info("Word-level captions written", words=len(words), lines=len(lines))
+        return True
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning("Word caption generation failed", error=str(e))
+        return False
 
 
 @lru_cache(maxsize=1)

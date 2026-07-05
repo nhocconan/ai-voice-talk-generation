@@ -5,12 +5,14 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import Link from "next/link"
+import { useTranslations } from "next-intl"
 import { api } from "@/lib/trpc/client"
 
 const schema = z.object({ email: z.string().email("Invalid email") })
 type FormData = z.infer<typeof schema>
 
 export function ForgotPasswordForm() {
+  const t = useTranslations("auth")
   const [submitted, setSubmitted] = useState(false)
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
@@ -25,10 +27,10 @@ export function ForgotPasswordForm() {
     return (
       <div className="space-y-4 text-center">
         <p className="text-body-ui text-[var(--color-text-primary)]">
-          If that email is registered, a reset link has been sent. Check your inbox.
+          {t("resetLinkSent")}
         </p>
         <Link href="/login" className="text-caption text-[var(--color-accent)] hover:underline">
-          Back to sign in
+          {t("backToSignIn")}
         </Link>
       </div>
     )
@@ -37,7 +39,7 @@ export function ForgotPasswordForm() {
   return (
     <form onSubmit={handleSubmit((data) => forgotPassword.mutate(data))} className="space-y-4">
       <div>
-        <label htmlFor="email" className="block text-caption mb-1.5">Email</label>
+        <label htmlFor="email" className="block text-caption mb-1.5">{t("emailLabel")}</label>
         <input
           id="email"
           type="email"
@@ -58,13 +60,13 @@ export function ForgotPasswordForm() {
       <button
         type="submit"
         disabled={forgotPassword.isPending}
-        className="w-full h-10 rounded-[var(--radius-pill)] bg-black text-white text-button disabled:opacity-50 hover:opacity-90 transition-opacity"
+        className="w-full h-10 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button disabled:opacity-50 hover:opacity-90 transition-opacity"
       >
-        {forgotPassword.isPending ? "Sending…" : "Send reset link"}
+        {forgotPassword.isPending ? t("sending") : t("sendResetLink")}
       </button>
 
       <p className="text-center text-caption text-[var(--color-text-muted)]">
-        <Link href="/login" className="text-[var(--color-accent)] hover:underline">Back to sign in</Link>
+        <Link href="/login" className="text-[var(--color-accent)] hover:underline">{t("backToSignIn")}</Link>
       </p>
     </form>
   )

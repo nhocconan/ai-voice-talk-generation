@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react"
 import { UploadCloudIcon, CheckCircleIcon, XCircleIcon } from "lucide-react"
+import { useTranslations } from "next-intl"
 import { trpc } from "@/lib/trpc/client"
 import { formatFileSize } from "@/lib/utils"
 import { cn } from "@/lib/utils"
@@ -18,10 +19,12 @@ interface FileEntry {
   file: File
   status: "pending" | "uploading" | "done" | "error"
   progress: number
-  error?: string
+  error?: string | undefined
+  canRetry?: boolean | undefined
 }
 
 export function AudioUploader({ profileId, onComplete }: Props) {
+  const t = useTranslations("voices")
   const [files, setFiles] = useState<FileEntry[]>([])
   const [dragging, setDragging] = useState(false)
 
@@ -35,7 +38,7 @@ export function AudioUploader({ profileId, onComplete }: Props) {
           file,
           status: "error" as const,
           progress: 0,
-          error: "Unsupported file type. Use mp3, m4a, wav, flac, or ogg.",
+          error: t("unsupportedFileType"),
         }
       }
       if (file.size > MAX_SIZE) {
@@ -43,7 +46,7 @@ export function AudioUploader({ profileId, onComplete }: Props) {
           file,
           status: "error" as const,
           progress: 0,
-          error: "File is larger than 100 MB.",
+          error: t("fileTooLarge"),
         }
       }
 
@@ -51,7 +54,7 @@ export function AudioUploader({ profileId, onComplete }: Props) {
     })
 
     setFiles((prev) => [...prev, ...nextEntries])
-  }, [])
+  }, [t])
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault()
@@ -86,11 +89,15 @@ export function AudioUploader({ profileId, onComplete }: Props) {
         setFiles((prev) => prev.map((f) => f === entry ? { ...f, status: "done", progress: 100 } : f))
         doneCount++
       } catch {
-        setFiles((prev) => prev.map((f) => f === entry ? { ...f, status: "error", error: "Upload failed. Please retry.", progress: 0 } : f))
+        setFiles((prev) => prev.map((f) => f === entry ? { ...f, status: "error", error: t("uploadFailedRetry"), progress: 0, canRetry: true } : f))
       }
     }
 
     if (doneCount > 0) onComplete()
+  }
+
+  const retry = (entry: FileEntry) => {
+    setFiles((prev) => prev.map((f) => (f === entry ? { ...f, status: "pending", error: undefined, canRetry: false, progress: 0 } : f)))
   }
 
   return (
@@ -114,8 +121,8 @@ export function AudioUploader({ profileId, onComplete }: Props) {
           aria-label="Upload audio files"
         />
         <UploadCloudIcon size={32} className="mx-auto mb-3 text-[var(--color-text-muted)]" />
-        <p className="text-body-med">Drop files here or click to upload</p>
-        <p className="text-caption text-[var(--color-text-muted)] mt-1">mp3, m4a, wav, flac — max 100 MB each</p>
+        <p className="text-body-med">{t("dropFilesHere")}</p>
+        <p className="text-caption text-[var(--color-text-muted)] mt-1">{t("dropFilesHint")}</p>
       </div>
 
       {/* File list */}
@@ -134,6 +141,15 @@ export function AudioUploader({ profileId, onComplete }: Props) {
               {entry.status === "error" && <XCircleIcon size={16} style={{ color: "var(--color-danger)" }} />}
               {entry.status === "uploading" && <span className="text-micro text-[var(--color-text-muted)] animate-pulse">{entry.progress}%</span>}
               {entry.error && <span className="text-micro text-[var(--color-danger)]">{entry.error}</span>}
+              {entry.canRetry && (
+                <button
+                  type="button"
+                  onClick={() => retry(entry)}
+                  className="text-micro rounded-[var(--radius-pill)] border border-[var(--color-border)] px-2.5 py-1 hover:bg-[var(--color-surface-0)] transition-colors"
+                >
+                  {t("retry")}
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -142,9 +158,9 @@ export function AudioUploader({ profileId, onComplete }: Props) {
       {files.some((f) => f.status === "pending") && (
         <button
           onClick={uploadAll}
-          className="h-10 px-6 rounded-[var(--radius-pill)] bg-black text-white text-button hover:opacity-90 transition-opacity"
+          className="h-10 px-6 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button hover:opacity-90 transition-opacity"
         >
-          Upload {files.filter((f) => f.status === "pending").length} file{files.filter((f) => f.status === "pending").length !== 1 ? "s" : ""}
+          {t("uploadCount", { count: files.filter((f) => f.status === "pending").length })}
         </button>
       )}
     </div>

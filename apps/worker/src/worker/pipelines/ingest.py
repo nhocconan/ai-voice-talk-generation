@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ..audio.io import normalize_audio
 from ..audio.quality import score_sample
+from ..config import settings
 from ..logging import get_logger
 from ..services.storage import download_object, upload_object
 
@@ -35,8 +36,32 @@ async def run_ingest(
         await asyncio.to_thread(download_object, storage_key, raw)
         logger.info("Downloaded", bytes=raw.stat().st_size)
 
+        # Optional: strip background music with Demucs before normalizing so the
+        # quality score and clone reflect the clean voice, not the music bed.
+        source = raw
+        if settings.enroll_separate:
+            try:
+                from ..audio.separate import separate_vocals
+
+                vocals, _ = await separate_vocals(raw, tmp_dir / "sep")
+                source = vocals
+                logger.info("Enrollment vocals separated")
+            except Exception as e:
+                logger.warning("Enrollment separation skipped", error=str(e))
+
+        # Optional: denoise steady background noise before normalizing.
+        if settings.enroll_denoise:
+            try:
+                from ..audio.denoise import denoise
+
+                denoised = tmp_dir / "denoised.wav"
+                source = await denoise(source, denoised)
+                logger.info("Enrollment denoised")
+            except Exception as e:
+                logger.warning("Enrollment denoise skipped", error=str(e))
+
         # Normalize: resample to 24kHz mono, loudness -16 LUFS
-        await normalize_audio(raw, normalized)
+        await normalize_audio(source, normalized)
         logger.info("Normalized audio")
 
         # VAD trim (silero) — optional, skip if silero unavailable

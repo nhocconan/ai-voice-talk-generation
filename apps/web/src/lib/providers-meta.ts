@@ -724,8 +724,1018 @@ export const PROVIDER_META: Record<string, ProviderMeta> = {
       },
     ],
   },
+  KOKORO: {
+    name: "Kokoro",
+    shortName: "Kokoro",
+    tagline: "Tiny (82M) Apache-2.0 TTS that runs many times faster than the cloning engines — the fast preset-voice lane for previews and drafts. Does not clone.",
+    needsApiKey: false,
+    docsLinks: [
+      { label: "GitHub", url: "https://github.com/hexgrad/kokoro" },
+      { label: "Model", url: "https://huggingface.co/hexgrad/Kokoro-82M" },
+    ],
+    supports: {
+      tts: true,
+      voiceCloning: false,
+      asr: false,
+      diarization: false,
+      streaming: false,
+      styleConditioning: false,
+      languages: ["en"],
+    },
+    setupSteps: [
+      "Install in the worker: `cd apps/worker && uv sync --extra kokoro`.",
+      "Kokoro does not clone voices — it ships fixed preset voices (e.g. `af_heart`). Pick one in the config form below.",
+      "Use it for the 15-second preview path and quick pacing checks where exact voice identity does not matter; switch to a cloning provider for the final render.",
+      "Save config, Test, then enable. There is no API key.",
+    ],
+    helpsWith: [
+      "Fast, low-cost previews and script-pacing checks",
+      "Offline English narration when cloning is not required",
+    ],
+    defaultConfig: {
+      voice: "af_heart",
+      maxChunkChars: 400,
+    },
+    configFields: [
+      {
+        key: "voice",
+        label: "Preset Voice",
+        input: "text",
+        description: "Kokoro voice pack name, e.g. `af_heart`, `af_bella`, `am_michael`.",
+        placeholder: "af_heart",
+      },
+      {
+        key: "maxChunkChars",
+        label: "Chunk Size",
+        input: "number",
+        description: "Maximum characters per chunk for the app chunker.",
+      },
+    ],
+  },
+  INDEXTTS2: {
+    name: "IndexTTS-2",
+    shortName: "IndexTTS2",
+    tagline: "SOTA zero-shot cloning (top WER + speaker similarity) with disentangled emotion control. English/Chinese-centric advanced-quality lane.",
+    needsApiKey: false,
+    docsLinks: [
+      { label: "GitHub", url: "https://github.com/index-tts/index-tts" },
+      { label: "Model", url: "https://huggingface.co/IndexTeam/IndexTTS-2" },
+    ],
+    supports: {
+      tts: true,
+      voiceCloning: true,
+      asr: false,
+      diarization: false,
+      streaming: false,
+      styleConditioning: true,
+      languages: ["en", "zh"],
+    },
+    setupSteps: [
+      "IndexTTS-2 is not on PyPI. Install from source in the worker env: `uv pip install \"git+https://github.com/index-tts/index-tts.git\"`.",
+      "Download the checkpoints (model + config.yaml) and set `modelDir` / `cfgPath` below to their location on the worker host.",
+      "Best on a CUDA GPU; Apple Silicon is best-effort. Set `useFp16` only with enough memory headroom.",
+      "For emotion control, set `emoText` (a description like 'calm, warm') and `emoAlpha`, or point `emoAudio` at a separate emotion reference clip.",
+      "Save config, Test, then enable. Use this as the high-fidelity lane for English/Chinese leadership voices.",
+    ],
+    helpsWith: [
+      "Highest-fidelity English/Chinese voice cloning",
+      "Emotion-controlled narration (borrow timbre from one ref, emotion from another)",
+      "A/B quality comparison against VoxCPM2 / ElevenLabs",
+    ],
+    defaultConfig: {
+      modelDir: "checkpoints",
+      cfgPath: "checkpoints/config.yaml",
+      useFp16: false,
+      emoText: "",
+      emoAlpha: 1.0,
+      emoAudio: "",
+      maxChunkChars: 300,
+    },
+    configFields: [
+      {
+        key: "modelDir",
+        label: "Model Directory",
+        input: "text",
+        description: "Path to the downloaded IndexTTS-2 checkpoints on the worker host.",
+        placeholder: "checkpoints",
+      },
+      {
+        key: "cfgPath",
+        label: "Config Path",
+        input: "text",
+        description: "Path to the model `config.yaml`.",
+        placeholder: "checkpoints/config.yaml",
+      },
+      {
+        key: "useFp16",
+        label: "Use FP16",
+        input: "boolean",
+        description: "Half-precision inference. Faster on capable GPUs; leave off on CPU/MPS.",
+      },
+      {
+        key: "emoText",
+        label: "Emotion Text",
+        input: "textarea",
+        description: "Optional natural-language emotion guidance (e.g. 'calm, warm, confident'). Overridden by a generation's style prompt when present.",
+      },
+      {
+        key: "emoAlpha",
+        label: "Emotion Strength",
+        input: "number",
+        description: "0–1 blend of the emotion onto the speaker. 1.0 = full emotion.",
+      },
+      {
+        key: "emoAudio",
+        label: "Emotion Reference Clip",
+        input: "text",
+        description: "Optional path to a separate clip whose emotion is transferred (timbre still comes from the profile).",
+      },
+      {
+        key: "maxChunkChars",
+        label: "Chunk Size",
+        input: "number",
+        description: "Maximum characters per chunk for the app chunker.",
+      },
+    ],
+  },
+  // ── LLM providers (script drafting) ────────────────────────────────────────
+  // These generate presentation/podcast scripts, not audio. supports.tts=false;
+  // the useful capability lives in tagline / helpsWith.
+  GEMINI_LLM: {
+    name: "Gemini (Google, LLM)",
+    shortName: "Gemini LLM",
+    tagline: "Google Gemini free-tier text model for drafting presentation and podcast scripts. Generous free quota via AI Studio.",
+    needsApiKey: true,
+    docsLinks: [
+      { label: "API Keys", url: "https://aistudio.google.com/apikey" },
+      { label: "Text Docs", url: "https://ai.google.dev/gemini-api/docs/text-generation" },
+      { label: "Pricing", url: "https://ai.google.dev/pricing" },
+    ],
+    supports: {
+      tts: false,
+      voiceCloning: false,
+      asr: false,
+      diarization: false,
+      streaming: false,
+      styleConditioning: false,
+      languages: ["vi", "en", "es", "fr", "de", "it", "pt", "ja", "ko", "zh"],
+    },
+    setupSteps: [
+      "Generate a Google AI Studio API key (free) and paste it below.",
+      "Use Test & Save to verify the key and that the Gemini model list is reachable from this host.",
+      "Pick the text model in the config form — `gemini-2.5-flash` is a strong free default for Vietnamese long-form drafting.",
+      "Enable the provider and (optionally) mark it default so the draft-script feature routes to it instead of paying providers.",
+    ],
+    helpsWith: [
+      "Free script drafting for presentations and podcasts",
+      "Vietnamese and English long-form generation",
+      "Zero-cost alternative to paid drafting APIs",
+    ],
+    defaultConfig: {
+      model: "gemini-2.5-flash",
+    },
+    configFields: [
+      {
+        key: "model",
+        label: "Model",
+        input: "text",
+        description: "Gemini text-generation model ID used for drafting.",
+        placeholder: "gemini-2.5-flash",
+      },
+    ],
+  },
+  GROQ: {
+    name: "Groq",
+    shortName: "Groq",
+    tagline: "Ultra-fast OpenAI-compatible inference with a free tier. Runs open models (Llama, etc.) at very low latency for script drafting.",
+    needsApiKey: true,
+    docsLinks: [
+      { label: "API Keys", url: "https://console.groq.com/keys" },
+      { label: "Docs", url: "https://console.groq.com/docs" },
+      { label: "Models", url: "https://console.groq.com/docs/models" },
+    ],
+    supports: {
+      tts: false,
+      voiceCloning: false,
+      asr: false,
+      diarization: false,
+      streaming: false,
+      styleConditioning: false,
+      languages: ["en", "vi", "es", "fr", "de", "pt", "zh"],
+    },
+    setupSteps: [
+      "Create a free Groq account at console.groq.com and generate an API key.",
+      "Paste the key below and use Test & Save — the app pings GET /openai/v1/models to confirm.",
+      "Pick a model in the config form. `llama-3.3-70b-versatile` is a solid free default.",
+      "Enable the provider and optionally mark it default for the draft-script feature.",
+    ],
+    helpsWith: [
+      "Free, low-latency script drafting",
+      "Open-model (Llama) generation",
+      "Cheap alternative to paid drafting APIs",
+    ],
+    defaultConfig: {
+      baseUrl: "https://api.groq.com/openai/v1",
+      model: "llama-3.3-70b-versatile",
+    },
+    configFields: [
+      {
+        key: "baseUrl",
+        label: "Base URL",
+        input: "url",
+        description: "OpenAI-compatible base URL. Leave as default unless proxying.",
+        placeholder: "https://api.groq.com/openai/v1",
+      },
+      {
+        key: "model",
+        label: "Model",
+        input: "text",
+        description: "Groq model ID used for drafting.",
+        placeholder: "llama-3.3-70b-versatile",
+      },
+    ],
+  },
+  XAI_LLM: {
+    name: "xAI Grok (LLM, API key)",
+    shortName: "Grok LLM",
+    tagline: "xAI Grok text models via API key (OpenAI-compatible). Pay-as-you-go drafting with the latest Grok models.",
+    needsApiKey: true,
+    docsLinks: [
+      { label: "API Console", url: "https://console.x.ai" },
+      { label: "Models", url: "https://docs.x.ai/docs/models" },
+      { label: "Chat Docs", url: "https://docs.x.ai/docs/guides/chat" },
+    ],
+    supports: {
+      tts: false,
+      voiceCloning: false,
+      asr: false,
+      diarization: false,
+      streaming: false,
+      styleConditioning: false,
+      languages: ["en", "vi", "zh", "fr", "de", "ja", "ko"],
+    },
+    setupSteps: [
+      "Generate an xAI API key from console.x.ai.",
+      "Paste the key below and use Test & Save — the app pings GET /v1/models to confirm.",
+      "Pick a model in the config form (e.g. `grok-4.3`).",
+      "Enable the provider and optionally mark it default for the draft-script feature.",
+    ],
+    helpsWith: [
+      "High-quality Grok script drafting via API key",
+      "Latest Grok models for long-form generation",
+      "Alternative to the SuperGrok OAuth lane when you have API credits",
+    ],
+    defaultConfig: {
+      baseUrl: "https://api.x.ai/v1",
+      model: "grok-4.3",
+    },
+    configFields: [
+      {
+        key: "baseUrl",
+        label: "Base URL",
+        input: "url",
+        description: "OpenAI-compatible base URL. Bearer tokens are only ever sent to api.x.ai.",
+        placeholder: "https://api.x.ai/v1",
+      },
+      {
+        key: "model",
+        label: "Model",
+        input: "text",
+        description: "xAI Grok model ID used for drafting.",
+        placeholder: "grok-4.3",
+      },
+    ],
+  },
+  GROK_OAUTH: {
+    name: "SuperGrok / X Premium+ (OAuth)",
+    shortName: "SuperGrok",
+    tagline: "Use your SuperGrok or X Premium+ subscription for script drafting via OAuth device-code login — no API key or per-token billing.",
+    needsApiKey: false,
+    docsLinks: [
+      { label: "Device Login", url: "https://x.ai/device" },
+      { label: "Models", url: "https://docs.x.ai/docs/models" },
+    ],
+    supports: {
+      tts: false,
+      voiceCloning: false,
+      asr: false,
+      diarization: false,
+      streaming: false,
+      styleConditioning: false,
+      languages: ["en", "vi", "zh", "fr", "de", "ja", "ko"],
+    },
+    setupSteps: [
+      "Open Setup & config below and click 'Connect SuperGrok'.",
+      "Open the shown verification link, enter the user code, and approve access with your SuperGrok / X Premium+ account.",
+      "The app stores the OAuth tokens (encrypted) and refreshes them automatically — no API key needed.",
+      "Pick a model in the config form (e.g. `grok-4.3`), then enable the provider for the draft-script feature.",
+    ],
+    helpsWith: [
+      "Script drafting billed to your Grok subscription instead of API credits",
+      "No API key management",
+      "Latest Grok models via your existing plan",
+    ],
+    defaultConfig: {
+      model: "grok-4.3",
+    },
+    configFields: [
+      {
+        key: "model",
+        label: "Model",
+        input: "text",
+        description: "xAI Grok model ID used for drafting.",
+        placeholder: "grok-4.3",
+      },
+    ],
+  },
+  OLLAMA: {
+    name: "Ollama (local)",
+    shortName: "Ollama",
+    tagline: "Run open LLMs locally with Ollama — fully offline, zero cost. OpenAI-compatible endpoint for script drafting.",
+    needsApiKey: false,
+    docsLinks: [
+      { label: "Website", url: "https://ollama.com" },
+      { label: "Models", url: "https://ollama.com/library" },
+      { label: "OpenAI Compatibility", url: "https://github.com/ollama/ollama/blob/main/docs/openai.md" },
+    ],
+    supports: {
+      tts: false,
+      voiceCloning: false,
+      asr: false,
+      diarization: false,
+      streaming: false,
+      styleConditioning: false,
+      languages: ["en", "vi", "zh"],
+    },
+    setupSteps: [
+      "Install Ollama (ollama.com) and pull a model, e.g. `ollama pull qwen2.5:7b`.",
+      "Set the Base URL below to your Ollama OpenAI-compatible endpoint (default `http://localhost:11434/v1`).",
+      "Use Test & Save — the app pings the local tags endpoint to confirm the server is up.",
+      "Enable the provider and optionally mark it default for fully offline, free drafting.",
+    ],
+    helpsWith: [
+      "Fully offline, zero-cost script drafting",
+      "Local open-model generation (Qwen, Llama, etc.)",
+      "No cloud dependency or API key",
+    ],
+    defaultConfig: {
+      baseUrl: "http://localhost:11434/v1",
+      model: "qwen2.5:7b",
+    },
+    configFields: [
+      {
+        key: "baseUrl",
+        label: "Base URL",
+        input: "url",
+        description: "Ollama OpenAI-compatible base URL on the app host.",
+        placeholder: "http://localhost:11434/v1",
+      },
+      {
+        key: "model",
+        label: "Model",
+        input: "text",
+        description: "Local Ollama model tag used for drafting.",
+        placeholder: "qwen2.5:7b",
+      },
+    ],
+  },
 }
 
-export function getProviderMeta(name: string): ProviderMeta | null {
-  return PROVIDER_META[name] ?? null
+type DeepPartial<T> = {
+  [P in keyof T]?: NonNullable<T[P]> extends (infer U)[]
+    ? DeepPartial<U>[]
+    : NonNullable<T[P]> extends object
+      ? DeepPartial<NonNullable<T[P]>>
+      : T[P]
+}
+
+/**
+ * Vietnamese overrides for the human-readable prose in PROVIDER_META.
+ * Only translated fields appear here; the English PROVIDER_META remains the
+ * source of truth for structure, keys, option values, languages, and defaults.
+ * Shell commands, file paths, URLs, and code identifiers are kept in English.
+ */
+const PROVIDER_META_VI_OVERRIDES: Record<string, DeepPartial<ProviderMeta>> = {
+  VIENEU_TTS: {
+    tagline:
+      "TTS cục bộ ưu tiên tiếng Việt với nhân bản giọng tức thì, tùy chọn GGUF/Turbo, và quy trình thân thiện với Apple Silicon.",
+    setupSteps: [
+      "Trên máy Apple Silicon hoặc host chỉ có CPU, cài VieNeu SDK vào worker: `cd apps/worker && uv sync --extra vieneu`.",
+      "Để tối ưu trên Mac, hãy bắt đầu với `mode=local`, `device=mps`, và model mặc định `pnnbao-ump/VieNeu-TTS`. Cách này giữ toàn bộ việc nhân bản và tổng hợp bên trong worker.",
+      "Nếu muốn dùng đường server từ xa chất lượng cao hơn, hãy khởi động một VieNeu server riêng rồi đặt `mode=remote` cùng `apiBase` trong form cấu hình bên dưới.",
+      "Tải lên một clip tham chiếu sạch dài 3–10 giây cho mỗi hồ sơ. VieNeu hoạt động tốt nhất với một người nói duy nhất, ít tạp âm phòng, và không có nhạc nền.",
+      "Nhấn Save config, rồi Test. Test xanh nghĩa là worker đã import được SDK và khởi tạo được runtime đã cấu hình.",
+      "Chỉ bật provider sau khi test thành công. Đặt làm mặc định nếu máy này là host suy luận cục bộ tiếng Việt chính của bạn.",
+    ],
+    helpsWith: [
+      "Tạo bài thuyết trình tiếng Việt cục bộ trên Mac Mini / MacBook Pro",
+      "Render bài nói 20–60 phút chi phí thấp với tổng hợp theo từng đoạn",
+      "Nhân bản giọng ngoại tuyến từ mẫu tham chiếu ngắn của người dùng",
+      "Lặp nhanh cho MVP mà không tốn chi phí API cloud",
+    ],
+    configFields: [
+      {
+        label: "Model",
+        description: "Model ID trên Hugging Face hoặc tên model cục bộ dùng bởi VieNeu SDK.",
+      },
+      {
+        label: "Chế độ Runtime",
+        description:
+          "Dùng `local` khi worker chạy VieNeu trực tiếp. Dùng `remote` khi bạn đã chạy sẵn một VieNeu API server riêng.",
+        options: [
+          { label: "Local SDK" },
+          { label: "Remote API" },
+        ],
+      },
+      {
+        label: "Remote API Base",
+        description: "Chỉ bắt buộc cho chế độ remote. Ví dụ: `http://127.0.0.1:23333/v1`.",
+      },
+      {
+        label: "Thiết bị ưu tiên",
+        description: "Lưu để người vận hành nắm rõ. Cài VieNeu cục bộ trên Mac nên ưu tiên `mps`.",
+        options: [
+          { label: "Apple Silicon (mps)" },
+          { label: "CPU" },
+          { label: "CUDA" },
+        ],
+      },
+      {
+        label: "Transcript tham chiếu",
+        description:
+          "Transcript tùy chọn cho clip tham chiếu. Để trống cho luồng zero-shot mặc định.",
+      },
+      {
+        label: "Kích thước đoạn",
+        description:
+          "Giới hạn trên cho tổng hợp theo đoạn trong app này. Giữ ở mức vừa phải để ổn định với nội dung dài.",
+      },
+    ],
+  },
+  VOXCPM2: {
+    tagline:
+      "TTS đa ngôn ngữ 48kHz của OpenBMB với nhân bản có kiểm soát, hỗ trợ style prompt, và lộ trình GPU mạnh trong tương lai.",
+    setupSteps: [
+      "Cài gói Python chính thức vào worker: `cd apps/worker && uv sync --extra voxcpm`.",
+      "Bắt đầu với model mặc định `openbmb/VoxCPM2`. Tài liệu chính thức benchmark CUDA trước; MPS trên Mac chỉ ở mức nỗ lực tốt nhất và nên được test trước khi đưa lên làm mặc định production.",
+      "Nếu muốn 'ultimate cloning' đầy đủ, hãy điền `Prompt Transcript` bằng transcript chính xác của clip tham chiếu và bật `Use Prompt Clone`.",
+      "Để đạt throughput production trên Linux GPU, OpenBMB khuyến nghị Nano-vLLM hoặc vLLM-Omni. Adapter tích hợp sẵn của app này hiện nhắm tới đường API Python chính thức.",
+      "Save config, nhấn Test, và chỉ sau đó mới bật provider cho người dùng.",
+      "Dùng provider này khi bạn cần kiểm soát style mạnh hơn hoặc muốn lộ trình chuyển đổi rõ ràng sang worker Linux+GPU trong tương lai.",
+    ],
+    helpsWith: [
+      "Nhân bản giọng đa ngôn ngữ độ trung thực cao hơn",
+      "Bài thuyết trình và podcast dẫn dắt theo style",
+      "Phục vụ production Linux+GPU trong tương lai",
+      "Đầu ra 48kHz cho các hồ sơ giọng cao cấp",
+    ],
+    configFields: [
+      {
+        label: "Model",
+        description: "Model ID trên Hugging Face hoặc thư mục checkpoint cục bộ cho VoxCPM2.",
+      },
+      {
+        label: "Thiết bị ưu tiên",
+        description:
+          "Đường nhanh chính thức là CUDA. `mps` được hỗ trợ ở đây như một đường nỗ lực tốt nhất do người vận hành cấu hình.",
+        options: [
+          { label: "CUDA" },
+          { label: "Apple Silicon (mps)" },
+          { label: "CPU" },
+        ],
+      },
+      {
+        label: "Giá trị CFG",
+        description:
+          "Giá trị classifier-free guidance dùng khi tạo. Mặc định `2.0` khớp với các ví dụ chính thức.",
+      },
+      {
+        label: "Số bước suy luận",
+        description: "Số bước diffusion. Cao hơn cải thiện chất lượng nhưng tốn thêm độ trễ.",
+      },
+      {
+        label: "Nạp Denoiser",
+        description: "Chỉ bật nếu bạn muốn giai đoạn denoiser và có đủ dư địa bộ nhớ.",
+      },
+      {
+        label: "Dùng Prompt Clone",
+        description:
+          "Khi bật, app dùng lại clip tham chiếu vừa làm `reference_wav_path` vừa làm `prompt_wav_path`.",
+      },
+      {
+        label: "Prompt Transcript",
+        description:
+          "Transcript chính xác của clip tham chiếu cho 'ultimate cloning'. Để trống cho nhân bản có kiểm soát tiêu chuẩn.",
+      },
+      {
+        label: "Kích thước đoạn",
+        description: "Số ký tự tối đa mỗi đoạn trong pipeline render của app này.",
+      },
+    ],
+  },
+  XTTS_V2: {
+    tagline:
+      "Phương án dự phòng cục bộ đa ngôn ngữ đã được kiểm chứng. Giữ lại để tương thích, không còn là khuyến nghị ưu tiên cho Mac.",
+    setupSteps: [
+      "XTTS chạy cục bộ bên trong worker; không cần API key.",
+      "Image worker đã bao gồm sẵn `TTS`. Trọng số model được tải xuống từ Hugging Face khi dùng lần đầu.",
+      "Dùng `device=mps` trên Apple Silicon hoặc `device=cuda` trên host Linux GPU.",
+      "Save config, Test, rồi bật. Giữ làm provider cục bộ dự phòng nếu VieNeu hoặc VoxCPM2 không khả dụng trên host.",
+    ],
+    helpsWith: [
+      "TTS cục bộ dự phòng khi các provider mới hơn không khả dụng",
+      "Tương thích với các test fixture hiện có",
+      "Tổng hợp đa ngôn ngữ tổng quát",
+    ],
+    configFields: [
+      {
+        label: "Model",
+        description: "Đường dẫn model XTTS hoặc tên trong registry.",
+      },
+      {
+        label: "Thiết bị ưu tiên",
+        description:
+          "Worker vẫn kiểm tra thiết bị của host; dùng mục này để ghi đè mặc định.",
+        options: [
+          { label: "Apple Silicon (mps)" },
+          { label: "CPU" },
+          { label: "CUDA" },
+        ],
+      },
+      {
+        label: "Kích thước đoạn",
+        description: "Số ký tự tối đa mỗi đoạn cho bộ chia đoạn của app.",
+      },
+    ],
+  },
+  F5_TTS: {
+    tagline:
+      "Phương án dự phòng cục bộ hiện có cho tổng hợp thiên tiếng Việt, giữ làm lựa chọn thứ cấp bên cạnh VieNeu-TTS.",
+    setupSteps: [
+      "F5-TTS chạy bên trong worker; không cần API key.",
+      "Giữ provider này tắt trừ khi host worker đã cài và test runtime F5.",
+      "Dùng làm provider cục bộ dự phòng, không phải khuyến nghị chính cho Mac khi VieNeu-TTS đã được hỗ trợ.",
+    ],
+    helpsWith: [
+      "Thử nghiệm TTS cục bộ tiếng Việt cũ",
+      "Benchmark provider dự phòng",
+    ],
+    configFields: [
+      {
+        label: "Model",
+        description: "Tên model F5 truyền vào bộ nạp cục bộ.",
+      },
+      {
+        label: "Kích thước đoạn",
+        description: "Số ký tự tối đa mỗi đoạn cho việc chia đoạn ở mức app.",
+      },
+    ],
+  },
+  ELEVENLABS: {
+    tagline: "Phương án dự phòng cloud thương mại với nhân bản giọng tức thì và vận hành ổn định, dễ dự đoán.",
+    setupSteps: [
+      "Tạo tài khoản ElevenLabs và tạo một API key.",
+      "Dán key bên dưới, rồi dùng Test & Save để app xác minh tài khoản trước khi lưu secret.",
+      "Tinh chỉnh model và thiết lập giọng trong form cấu hình nếu bạn cần một hồ sơ dự phòng cloud khác với model đa ngôn ngữ mặc định.",
+      "Chỉ bật provider nếu bạn muốn dung lượng dự phòng trả phí.",
+    ],
+    helpsWith: [
+      "Dự phòng trả phí khi các provider cục bộ quá chậm hoặc không khả dụng",
+      "Nhân bản giọng thương mại độ trung thực cao nhất cho hồ sơ lãnh đạo",
+      "Tổng hợp streaming cho nội dung dài",
+    ],
+    configFields: [
+      {
+        label: "Model",
+        description: "Model ID của ElevenLabs dùng cho các yêu cầu text-to-speech.",
+      },
+      {
+        label: "Độ ổn định",
+        description: "Giá trị độ ổn định của giọng, từ 0 đến 1.",
+      },
+      {
+        label: "Similarity Boost",
+        description: "Similarity boost từ 0 đến 1.",
+      },
+      {
+        label: "Style",
+        description: "Mức phóng đại style từ 0 đến 1.",
+      },
+      {
+        label: "Dùng Speaker Boost",
+        description: "Bật speaker boost của ElevenLabs.",
+      },
+      {
+        label: "Kích thước đoạn",
+        description: "Kích thước đoạn tối đa cho kịch bản dài.",
+      },
+    ],
+  },
+  GEMINI_TTS: {
+    tagline:
+      "TTS đa ngôn ngữ giọng dựng sẵn giá rẻ, đồng thời chính API key này cũng phục vụ các trợ thủ soạn thảo và căn nhịp.",
+    setupSteps: [
+      "Tạo một API key Google AI Studio và dán vào bên dưới.",
+      "Dùng Test & Save để xác minh key và rằng danh sách model có thể truy cập từ host này.",
+      "Chọn model TTS và giọng dựng sẵn trong form cấu hình nếu bạn không muốn dùng mặc định.",
+      "Lưu ý: Gemini TTS không nhân bản giọng người dùng trong app này. Nó ở đây như một phương án dự phòng giọng dựng sẵn chi phí thấp và cho các tính năng soạn thảo.",
+    ],
+    helpsWith: [
+      "Tạo giọng dựng sẵn chi phí thấp",
+      "Soạn thảo kịch bản, khóa nhịp, và chuyển đổi transcript",
+      "Dự phòng cloud khi không cần nhân bản",
+    ],
+    configFields: [
+      {
+        label: "Model",
+        description: "Model ID sinh giọng nói của Gemini.",
+      },
+      {
+        label: "Giọng dựng sẵn",
+        description: "Tên giọng dựng sẵn của Google, ví dụ `Aoede`.",
+      },
+      {
+        label: "Kích thước đoạn",
+        description: "Kích thước đoạn tối đa cho tổng hợp nội dung dài.",
+      },
+    ],
+  },
+  XIAOMI_TTS: {
+    tagline:
+      "Dòng MiMo-V2.5-TTS với giọng dựng sẵn, thiết kế giọng, và nhân bản giọng từ mẫu audio. Miễn phí trong thời gian giới hạn.",
+    setupSteps: [
+      "Đăng nhập platform.xiaomimimo.com bằng tài khoản Xiaomi và tạo một API key trong Console.",
+      "Key trả theo dùng (sk-…) dùng https://api.xiaomimimo.com/v1; key Token Plan (tp-…) dùng https://token-plan-sgp.xiaomimimo.com/v1. Worker tự định tuyến theo tiền tố, hoặc ghi đè qua trường Base URL.",
+      "Dán key bên dưới, rồi dùng Test & Save để worker xác minh trước khi lưu.",
+      "Chọn một giọng dựng sẵn (Chloe, Mia, Milo, Dean, 冰糖, 茉莉, 苏打, 白桦) — dùng khi không cung cấp mẫu nhân bản.",
+      "Bật provider khi test thành công. Với giọng nhân bản, worker gửi lại clip tham chiếu ở mỗi yêu cầu.",
+    ],
+    helpsWith: [
+      "Nhân bản giọng song ngữ Trung / Anh / Việt từ một clip tham chiếu ngắn",
+      "Thuyết minh có kiểm soát style qua prompt đạo diễn bằng ngôn ngữ tự nhiên",
+      "Dự phòng cloud giá rẻ (miễn phí trong beta) cho chế độ podcast và thuyết trình",
+    ],
+    configFields: [
+      {
+        label: "Base URL",
+        description:
+          "Để trống để tự định tuyến theo tiền tố key. Trả theo dùng: https://api.xiaomimimo.com/v1. Token Plan: https://token-plan-sgp.xiaomimimo.com/v1.",
+      },
+      {
+        label: "Model dựng sẵn",
+        description: "Model dùng khi tổng hợp với giọng dựng sẵn (không có mẫu tham chiếu).",
+      },
+      {
+        label: "Model nhân bản",
+        description: "Model dùng khi có mẫu audio tham chiếu để nhân bản.",
+      },
+      {
+        label: "Giọng dựng sẵn",
+        description: "Giọng mặc định cho tổng hợp dựng sẵn. Bỏ qua khi nhân bản.",
+        options: [
+          { label: "MiMo Default" },
+          { label: "Chloe (English Female)" },
+          { label: "Mia (English Female)" },
+          { label: "Milo (English Male)" },
+          { label: "Dean (English Male)" },
+          { label: "冰糖 (Chinese Female)" },
+          { label: "茉莉 (Chinese Female)" },
+          { label: "苏打 (Chinese Male)" },
+          { label: "白桦 (Chinese Male)" },
+        ],
+      },
+      {
+        label: "Định dạng audio",
+        description: "Codec đầu ra mà API trả về.",
+        options: [
+          { label: "WAV" },
+          { label: "MP3" },
+          { label: "PCM16" },
+        ],
+      },
+      {
+        label: "Style prompt mặc định",
+        description:
+          "Chỉ dẫn style bằng ngôn ngữ tự nhiên tùy chọn, được thêm vào đầu mỗi yêu cầu tổng hợp.",
+      },
+      {
+        label: "Kích thước đoạn",
+        description: "Số ký tự tối đa mỗi đoạn cho kịch bản dài.",
+      },
+    ],
+  },
+  XAI_TTS: {
+    tagline:
+      "Grok TTS với giọng tùy chỉnh — nhân bản giọng từ tối đa 120 giây audio và tái sử dụng voice_id qua REST và WebSocket TTS.",
+    setupSteps: [
+      "Tạo một xAI API key từ console.x.ai (cần gói Enterprise cho /custom-voices).",
+      "Dán key bên dưới và dùng Test & Save — worker gọi GET /v1/tts/voices để xác nhận.",
+      "Chọn một giọng dựng sẵn mặc định (eve, ara, leo, rex, sal) dùng khi không cung cấp mẫu nhân bản.",
+      "Nhân bản là một lần: khi một hồ sơ được render lần đầu, clip tham chiếu được tải lên /custom-voices và voice_id trả về sẽ được tái sử dụng.",
+    ],
+    helpsWith: [
+      "Nhân bản giọng chất lượng cao từ clip tham chiếu ngắn (khuyến nghị 90+ giây)",
+      "Thuyết minh đa ngôn ngữ 20 thứ tiếng với tạo style bằng speech tag",
+      "Streaming thời gian thực qua WebSocket (ở đây dùng REST)",
+    ],
+    configFields: [
+      {
+        label: "Giọng dựng sẵn mặc định",
+        description: "Giọng dùng khi không cung cấp mẫu nhân bản.",
+        options: [
+          { label: "Eve" },
+          { label: "Ara" },
+          { label: "Leo" },
+          { label: "Rex" },
+          { label: "Sal" },
+        ],
+      },
+      {
+        label: "Codec",
+        description: "Codec audio đầu ra.",
+        options: [
+          { label: "MP3" },
+          { label: "WAV" },
+          { label: "PCM" },
+          { label: "μ-law" },
+          { label: "A-law" },
+        ],
+      },
+      {
+        label: "Sample Rate",
+        description: "Sample rate đầu ra tính bằng Hz (ví dụ 24000).",
+      },
+      {
+        label: "Bit Rate",
+        description: "Bit rate đầu ra tính bằng bps (ví dụ 128000 cho MP3).",
+      },
+      {
+        label: "Chuẩn hóa văn bản",
+        description: "Chuẩn hóa văn bản viết thành dạng nói trước khi tổng hợp.",
+      },
+      {
+        label: "Kích thước đoạn",
+        description: "Số ký tự tối đa mỗi đoạn (giới hạn cứng của xAI là 15.000).",
+      },
+    ],
+  },
+  VIBEVOICE: {
+    tagline:
+      "Giữ trong bảng để lưu lịch sử nghiên cứu, nhưng không phải provider chính được khuyến nghị cho sản phẩm này.",
+    setupSteps: [
+      "Không bật provider này làm mặc định production. Adapter worker vẫn là một stub được ghi chú.",
+      "Chỉ giữ để theo dõi nghiên cứu hoặc thử nghiệm GPU tương lai ngoài đường ưu tiên Mac hiện tại.",
+    ],
+    helpsWith: [
+      "Chỉ để so sánh nghiên cứu",
+    ],
+    configFields: [
+      {
+        label: "Model",
+        description: "Chỉ theo dõi cho thử nghiệm tương lai.",
+      },
+      {
+        label: "Thiết bị ưu tiên",
+        description: "Chỉ theo dõi cho thử nghiệm tương lai.",
+        options: [
+          { label: "CUDA" },
+          { label: "Apple Silicon (experimental)" },
+          { label: "CPU" },
+        ],
+      },
+      {
+        label: "Kích thước đoạn",
+        description: "Chỉ theo dõi cho thử nghiệm tương lai.",
+      },
+    ],
+  },
+  KOKORO: {
+    tagline:
+      "TTS Apache-2.0 nhỏ gọn (82M) chạy nhanh gấp nhiều lần các engine nhân bản — đường giọng dựng sẵn tốc độ cao cho bản xem trước và bản nháp. Không nhân bản.",
+    setupSteps: [
+      "Cài vào worker: `cd apps/worker && uv sync --extra kokoro`.",
+      "Kokoro không nhân bản giọng — nó đi kèm các giọng dựng sẵn cố định (ví dụ `af_heart`). Chọn một giọng trong form cấu hình bên dưới.",
+      "Dùng cho đường xem trước 15 giây và kiểm tra nhịp nhanh khi danh tính giọng chính xác không quan trọng; chuyển sang provider nhân bản cho bản render cuối.",
+      "Save config, Test, rồi bật. Không có API key.",
+    ],
+    helpsWith: [
+      "Bản xem trước nhanh, chi phí thấp và kiểm tra nhịp kịch bản",
+      "Thuyết minh tiếng Anh ngoại tuyến khi không cần nhân bản",
+    ],
+    configFields: [
+      {
+        label: "Giọng dựng sẵn",
+        description: "Tên gói giọng Kokoro, ví dụ `af_heart`, `af_bella`, `am_michael`.",
+      },
+      {
+        label: "Kích thước đoạn",
+        description: "Số ký tự tối đa mỗi đoạn cho bộ chia đoạn của app.",
+      },
+    ],
+  },
+  INDEXTTS2: {
+    tagline:
+      "Nhân bản zero-shot SOTA (WER và độ tương đồng giọng nói dẫn đầu) với kiểm soát cảm xúc tách biệt. Đường chất lượng cao thiên tiếng Anh/tiếng Trung.",
+    setupSteps: [
+      "IndexTTS-2 không có trên PyPI. Cài từ nguồn trong môi trường worker: `uv pip install \"git+https://github.com/index-tts/index-tts.git\"`.",
+      "Tải các checkpoint (model + config.yaml) và đặt `modelDir` / `cfgPath` bên dưới trỏ tới vị trí của chúng trên host worker.",
+      "Tốt nhất trên GPU CUDA; Apple Silicon chỉ ở mức nỗ lực tốt nhất. Chỉ đặt `useFp16` khi có đủ dư địa bộ nhớ.",
+      "Để kiểm soát cảm xúc, đặt `emoText` (một mô tả như 'calm, warm') và `emoAlpha`, hoặc trỏ `emoAudio` tới một clip tham chiếu cảm xúc riêng.",
+      "Save config, Test, rồi bật. Dùng đây làm đường độ trung thực cao cho giọng lãnh đạo tiếng Anh/tiếng Trung.",
+    ],
+    helpsWith: [
+      "Nhân bản giọng tiếng Anh/tiếng Trung độ trung thực cao nhất",
+      "Thuyết minh có kiểm soát cảm xúc (mượn âm sắc từ một clip tham chiếu, cảm xúc từ clip khác)",
+      "So sánh chất lượng A/B với VoxCPM2 / ElevenLabs",
+    ],
+    configFields: [
+      {
+        label: "Thư mục Model",
+        description: "Đường dẫn tới các checkpoint IndexTTS-2 đã tải trên host worker.",
+      },
+      {
+        label: "Đường dẫn Config",
+        description: "Đường dẫn tới `config.yaml` của model.",
+      },
+      {
+        label: "Dùng FP16",
+        description: "Suy luận nửa độ chính xác. Nhanh hơn trên GPU đủ mạnh; tắt trên CPU/MPS.",
+      },
+      {
+        label: "Văn bản cảm xúc",
+        description:
+          "Chỉ dẫn cảm xúc bằng ngôn ngữ tự nhiên tùy chọn (ví dụ 'calm, warm, confident'). Bị ghi đè bởi style prompt của lần tạo khi có.",
+      },
+      {
+        label: "Cường độ cảm xúc",
+        description: "Mức pha 0–1 của cảm xúc lên giọng người nói. 1.0 = cảm xúc đầy đủ.",
+      },
+      {
+        label: "Clip tham chiếu cảm xúc",
+        description:
+          "Đường dẫn tùy chọn tới một clip riêng để chuyển cảm xúc (âm sắc vẫn lấy từ hồ sơ).",
+      },
+      {
+        label: "Kích thước đoạn",
+        description: "Số ký tự tối đa mỗi đoạn cho bộ chia đoạn của app.",
+      },
+    ],
+  },
+  GEMINI_LLM: {
+    tagline:
+      "Model văn bản Gemini gói miễn phí của Google để soạn kịch bản thuyết trình và podcast. Hạn mức miễn phí hào phóng qua AI Studio.",
+    setupSteps: [
+      "Tạo một API key Google AI Studio (miễn phí) và dán vào bên dưới.",
+      "Dùng Test & Save để xác minh key và rằng danh sách model Gemini có thể truy cập từ host này.",
+      "Chọn model văn bản trong form cấu hình — `gemini-2.5-flash` là mặc định miễn phí mạnh cho soạn thảo tiếng Việt dài.",
+      "Bật provider và (tùy chọn) đặt làm mặc định để tính năng soạn kịch bản dùng nó thay cho các provider trả phí.",
+    ],
+    helpsWith: [
+      "Soạn kịch bản miễn phí cho thuyết trình và podcast",
+      "Tạo nội dung dài tiếng Việt và tiếng Anh",
+      "Giải pháp không tốn phí thay cho các API soạn thảo trả phí",
+    ],
+    configFields: [
+      {
+        label: "Model",
+        description: "Model ID sinh văn bản của Gemini dùng để soạn thảo.",
+      },
+    ],
+  },
+  GROQ: {
+    tagline:
+      "Suy luận tương thích OpenAI cực nhanh với gói miễn phí. Chạy các model mở (Llama, v.v.) với độ trễ rất thấp để soạn kịch bản.",
+    setupSteps: [
+      "Tạo tài khoản Groq miễn phí tại console.groq.com và tạo một API key.",
+      "Dán key bên dưới và dùng Test & Save — app gọi GET /openai/v1/models để xác nhận.",
+      "Chọn model trong form cấu hình. `llama-3.3-70b-versatile` là mặc định miễn phí tốt.",
+      "Bật provider và tùy chọn đặt làm mặc định cho tính năng soạn kịch bản.",
+    ],
+    helpsWith: [
+      "Soạn kịch bản miễn phí, độ trễ thấp",
+      "Tạo nội dung bằng model mở (Llama)",
+      "Giải pháp rẻ thay cho các API soạn thảo trả phí",
+    ],
+    configFields: [
+      {
+        label: "Base URL",
+        description: "Base URL tương thích OpenAI. Giữ mặc định trừ khi dùng proxy.",
+      },
+      {
+        label: "Model",
+        description: "Model ID của Groq dùng để soạn thảo.",
+      },
+    ],
+  },
+  XAI_LLM: {
+    tagline:
+      "Model văn bản xAI Grok qua API key (tương thích OpenAI). Soạn thảo trả theo dùng với các model Grok mới nhất.",
+    setupSteps: [
+      "Tạo một xAI API key từ console.x.ai.",
+      "Dán key bên dưới và dùng Test & Save — app gọi GET /v1/models để xác nhận.",
+      "Chọn model trong form cấu hình (ví dụ `grok-4.3`).",
+      "Bật provider và tùy chọn đặt làm mặc định cho tính năng soạn kịch bản.",
+    ],
+    helpsWith: [
+      "Soạn kịch bản Grok chất lượng cao qua API key",
+      "Các model Grok mới nhất cho nội dung dài",
+      "Thay thế cho đường OAuth SuperGrok khi bạn có credit API",
+    ],
+    configFields: [
+      {
+        label: "Base URL",
+        description: "Base URL tương thích OpenAI. Bearer token chỉ được gửi tới api.x.ai.",
+      },
+      {
+        label: "Model",
+        description: "Model ID xAI Grok dùng để soạn thảo.",
+      },
+    ],
+  },
+  GROK_OAUTH: {
+    tagline:
+      "Dùng gói SuperGrok hoặc X Premium+ của bạn để soạn kịch bản qua đăng nhập OAuth device-code — không cần API key hay tính phí theo token.",
+    setupSteps: [
+      "Mở Setup & config bên dưới và nhấn 'Connect SuperGrok'.",
+      "Mở liên kết xác minh hiển thị, nhập user code, và phê duyệt truy cập bằng tài khoản SuperGrok / X Premium+ của bạn.",
+      "App lưu token OAuth (đã mã hóa) và tự làm mới — không cần API key.",
+      "Chọn model trong form cấu hình (ví dụ `grok-4.3`), rồi bật provider cho tính năng soạn kịch bản.",
+    ],
+    helpsWith: [
+      "Soạn kịch bản tính vào gói đăng ký Grok thay vì credit API",
+      "Không phải quản lý API key",
+      "Các model Grok mới nhất qua gói hiện có của bạn",
+    ],
+    configFields: [
+      {
+        label: "Model",
+        description: "Model ID xAI Grok dùng để soạn thảo.",
+      },
+    ],
+  },
+  OLLAMA: {
+    tagline:
+      "Chạy các LLM mở cục bộ với Ollama — hoàn toàn ngoại tuyến, không tốn phí. Endpoint tương thích OpenAI để soạn kịch bản.",
+    setupSteps: [
+      "Cài Ollama (ollama.com) và tải một model, ví dụ `ollama pull qwen2.5:7b`.",
+      "Đặt Base URL bên dưới trỏ tới endpoint tương thích OpenAI của Ollama (mặc định `http://localhost:11434/v1`).",
+      "Dùng Test & Save — app gọi endpoint tags cục bộ để xác nhận server đang chạy.",
+      "Bật provider và tùy chọn đặt làm mặc định để soạn thảo hoàn toàn ngoại tuyến, miễn phí.",
+    ],
+    helpsWith: [
+      "Soạn kịch bản hoàn toàn ngoại tuyến, không tốn phí",
+      "Tạo nội dung bằng model mở cục bộ (Qwen, Llama, v.v.)",
+      "Không phụ thuộc cloud hay API key",
+    ],
+    configFields: [
+      {
+        label: "Base URL",
+        description: "Base URL tương thích OpenAI của Ollama trên host của app.",
+      },
+      {
+        label: "Model",
+        description: "Tag model Ollama cục bộ dùng để soạn thảo.",
+      },
+    ],
+  },
+}
+
+function mergeConfigFields(
+  base: ProviderConfigField[],
+  overrides: DeepPartial<ProviderConfigField>[],
+): ProviderConfigField[] {
+  return base.map((field, i) => {
+    const ov = overrides[i]
+    if (!ov) return field
+    const { options: ovOptions, ...ovRest } = ov
+    const mergedOptions = field.options?.map((option, j) => {
+      const optOv = ovOptions?.[j]
+      return optOv ? { ...option, ...optOv } : option
+    })
+    return {
+      ...field,
+      ...ovRest,
+      ...(mergedOptions ? { options: mergedOptions } : {}),
+    }
+  })
+}
+
+function applyViOverrides(base: ProviderMeta, overrides: DeepPartial<ProviderMeta>): ProviderMeta {
+  const merged: ProviderMeta = { ...base, ...(overrides as Partial<ProviderMeta>) }
+  if (overrides.configFields && base.configFields) {
+    merged.configFields = mergeConfigFields(
+      base.configFields,
+      overrides.configFields as DeepPartial<ProviderConfigField>[],
+    )
+  }
+  return merged
+}
+
+export function getProviderMeta(name: string, locale = "vi"): ProviderMeta | null {
+  const base = PROVIDER_META[name] ?? null
+  if (!base) return null
+  if (locale !== "vi") return base
+  const overrides = PROVIDER_META_VI_OVERRIDES[name]
+  if (!overrides) return base
+  return applyViOverrides(base, overrides)
 }

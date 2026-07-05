@@ -1,27 +1,29 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import { trpc } from "@/lib/trpc/client"
 import { CheckCircle2Icon, XCircleIcon, AlertTriangleIcon, MinusCircleIcon, RefreshCwIcon } from "lucide-react"
 
-interface StatusStyle { color: string; label: string; Icon: typeof CheckCircle2Icon }
+interface StatusStyle { color: string; labelKey: string; Icon: typeof CheckCircle2Icon }
 
 const STATUS_STYLES: Record<"up" | "down" | "degraded" | "disabled", StatusStyle> = {
-  up: { color: "var(--color-success)", label: "UP", Icon: CheckCircle2Icon },
-  down: { color: "var(--color-error)", label: "DOWN", Icon: XCircleIcon },
-  degraded: { color: "var(--color-warning, #d97706)", label: "DEGRADED", Icon: AlertTriangleIcon },
-  disabled: { color: "var(--color-text-muted)", label: "DISABLED", Icon: MinusCircleIcon },
+  up: { color: "var(--color-success)", labelKey: "systemHealth.statusUp", Icon: CheckCircle2Icon },
+  down: { color: "var(--color-error)", labelKey: "systemHealth.statusDown", Icon: XCircleIcon },
+  degraded: { color: "var(--color-warning, #d97706)", labelKey: "systemHealth.statusDegraded", Icon: AlertTriangleIcon },
+  disabled: { color: "var(--color-text-muted)", labelKey: "systemHealth.statusDisabled", Icon: MinusCircleIcon },
 }
 
 export function SystemHealthDashboard() {
+  const t = useTranslations("admin")
   const { data, isLoading, refetch, isFetching } = trpc.system.health.useQuery(undefined, {
     refetchOnWindowFocus: false,
   })
 
   if (isLoading) {
-    return <p className="text-body text-[var(--color-text-muted)]">Probing services…</p>
+    return <p className="text-body text-[var(--color-text-muted)]">{t("systemHealth.probing")}</p>
   }
   if (!data) {
-    return <p className="text-body text-[var(--color-error)]">Failed to load health data.</p>
+    return <p className="text-body text-[var(--color-error)]">{t("systemHealth.loadFailed")}</p>
   }
 
   const { services, summary, features, checkedAt } = data
@@ -30,12 +32,12 @@ export function SystemHealthDashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex flex-wrap items-center gap-3 text-caption text-[var(--color-text-muted)]">
-          <span>Checked {new Date(checkedAt).toLocaleTimeString()}</span>
+          <span>{t("systemHealth.checkedAt", { time: new Date(checkedAt).toLocaleTimeString() })}</span>
           <span>·</span>
-          <span style={{ color: "var(--color-success)" }}>{summary.ok} up</span>
-          {summary.degraded > 0 && <span style={{ color: "var(--color-warning, #d97706)" }}>{summary.degraded} degraded</span>}
-          {summary.down > 0 && <span style={{ color: "var(--color-error)" }}>{summary.down} down</span>}
-          {summary.disabled > 0 && <span>{summary.disabled} disabled</span>}
+          <span style={{ color: "var(--color-success)" }}>{t("systemHealth.countUp", { count: summary.ok })}</span>
+          {summary.degraded > 0 && <span style={{ color: "var(--color-warning, #d97706)" }}>{t("systemHealth.countDegraded", { count: summary.degraded })}</span>}
+          {summary.down > 0 && <span style={{ color: "var(--color-error)" }}>{t("systemHealth.countDown", { count: summary.down })}</span>}
+          {summary.disabled > 0 && <span>{t("systemHealth.countDisabled", { count: summary.disabled })}</span>}
         </div>
         <button
           onClick={() => refetch()}
@@ -43,12 +45,12 @@ export function SystemHealthDashboard() {
           className="flex items-center gap-1.5 text-caption border border-[var(--color-border)] px-3 py-1.5 rounded-[var(--radius-pill)] hover:bg-[var(--color-surface-1)] transition-colors disabled:opacity-50"
         >
           <RefreshCwIcon size={12} className={isFetching ? "animate-spin" : ""} />
-          Re-probe
+          {t("systemHealth.reprobe")}
         </button>
       </div>
 
       <section className="space-y-3">
-        <h2 className="text-body-med">Services</h2>
+        <h2 className="text-body-med">{t("systemHealth.services")}</h2>
         <div className="grid gap-2">
           {services.map((s) => {
             const style = STATUS_STYLES[s.status as keyof typeof STATUS_STYLES] ?? STATUS_STYLES.disabled
@@ -69,10 +71,10 @@ export function SystemHealthDashboard() {
                           className="text-micro px-1.5 py-0.5 rounded-full font-medium uppercase tracking-wider"
                           style={{ color: style.color, border: `1px solid ${style.color}` }}
                         >
-                          {style.label}
+                          {t(style.labelKey)}
                         </span>
                         {!s.required && (
-                          <span className="text-micro text-[var(--color-text-muted)]">optional</span>
+                          <span className="text-micro text-[var(--color-text-muted)]">{t("systemHealth.optional")}</span>
                         )}
                       </div>
                       {s.detail && (
@@ -80,7 +82,7 @@ export function SystemHealthDashboard() {
                       )}
                       {s.supports.length > 0 && (
                         <p className="text-caption text-[var(--color-text-muted)] mt-1">
-                          Supports: {s.supports.join(", ")}
+                          {t("systemHealth.supports")}: {s.supports.join(", ")}
                         </p>
                       )}
                       {s.setupHint && (
@@ -98,9 +100,9 @@ export function SystemHealthDashboard() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-body-med">Feature availability</h2>
+        <h2 className="text-body-med">{t("systemHealth.featureAvailability")}</h2>
         <p className="text-caption text-[var(--color-text-muted)]">
-          Each feature is viable only when its required services are up. Degraded markers indicate an optional dependency is missing.
+          {t("systemHealth.featureHelp")}
         </p>
         <div className="grid gap-2">
           {features.map((f) => (
@@ -119,12 +121,12 @@ export function SystemHealthDashboard() {
                   <div className="text-body-med">{f.label}</div>
                   {f.blockedBy.length > 0 && (
                     <p className="text-caption mt-0.5" style={{ color: "var(--color-error)" }}>
-                      Blocked by: {f.blockedBy.join(", ")}
+                      {t("systemHealth.blockedBy")}: {f.blockedBy.join(", ")}
                     </p>
                   )}
                   {f.degradedBy.length > 0 && (
                     <p className="text-caption mt-0.5" style={{ color: "var(--color-warning, #d97706)" }}>
-                      Degraded: {f.degradedBy.join(", ")}
+                      {t("systemHealth.degradedBy")}: {f.degradedBy.join(", ")}
                     </p>
                   )}
                 </div>
@@ -136,7 +138,7 @@ export function SystemHealthDashboard() {
                   border: `1px solid ${f.viable ? "var(--color-success)" : "var(--color-error)"}`,
                 }}
               >
-                {f.viable ? "Available" : "Disabled"}
+                {f.viable ? t("systemHealth.available") : t("systemHealth.disabled")}
               </span>
             </div>
           ))}

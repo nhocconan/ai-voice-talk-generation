@@ -1,19 +1,28 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { trpc } from "@/lib/trpc/client";
 
 const STATUS_COLORS: Record<string, string> = {
-  QUEUED: "bg-amber-100 text-amber-800",
-  RUNNING: "bg-blue-100 text-blue-800",
-  DONE: "bg-emerald-100 text-emerald-800",
-  FAILED: "bg-red-100 text-red-800",
-  CANCELLED: "bg-gray-100 text-gray-600",
+  QUEUED: "bg-amber-100 text-amber-800 dark:bg-amber-400/15 dark:text-amber-300",
+  RUNNING: "bg-blue-100 text-blue-800 dark:bg-blue-400/15 dark:text-blue-300",
+  DONE: "bg-emerald-100 text-emerald-800 dark:bg-emerald-400/15 dark:text-emerald-300",
+  FAILED: "bg-red-100 text-red-800 dark:bg-red-400/15 dark:text-red-300",
+  CANCELLED: "bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-white/60",
 };
 
-const KIND_LABELS: Record<string, string> = {
-  PRESENTATION: "Presentation",
-  PODCAST: "Podcast",
-  REVOICE: "Re-voice",
+const KIND_KEYS: Record<string, string> = {
+  PRESENTATION: "kindPresentation",
+  PODCAST: "kindPodcast",
+  REVOICE: "kindRevoice",
+};
+
+const STATUS_KEYS: Record<string, string> = {
+  QUEUED: "statusQueued",
+  RUNNING: "statusRunning",
+  DONE: "statusDone",
+  FAILED: "statusFailed",
+  CANCELLED: "statusCancelled",
 };
 
 function formatMs(ms: number) {
@@ -23,6 +32,7 @@ function formatMs(ms: number) {
 }
 
 export function GenerationHistoryList() {
+  const t = useTranslations("history");
   const { data, isLoading } = trpc.generation.list.useQuery({ page: 1, pageSize: 50 });
 
   if (isLoading) {
@@ -38,9 +48,9 @@ export function GenerationHistoryList() {
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border)] py-20 text-center">
-        <p className="text-[var(--color-text-secondary)]">No generations yet.</p>
+        <p className="text-[var(--color-text-secondary)]">{t("emptyTitle")}</p>
         <a href="/generate" className="mt-3 text-sm text-[var(--color-accent)] hover:underline">
-          Create your first one →
+          {t("emptyCta")} →
         </a>
       </div>
     );
@@ -55,12 +65,12 @@ export function GenerationHistoryList() {
         >
           <div className="flex items-center gap-4">
             <span className="text-sm font-medium text-[var(--color-text-primary)]">
-              {KIND_LABELS[item.kind] ?? item.kind}
+              {KIND_KEYS[item.kind] ? t(KIND_KEYS[item.kind]) : item.kind}
             </span>
             <span
               className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[item.status] ?? "bg-gray-100"}`}
             >
-              {item.status}
+              {STATUS_KEYS[item.status] ? t(STATUS_KEYS[item.status]) : item.status}
             </span>
             {item.durationMs && (
               <span className="text-xs text-[var(--color-text-tertiary)]">
@@ -78,7 +88,7 @@ export function GenerationHistoryList() {
                 href={`/api/download/${item.id}`}
                 className="rounded-md bg-[var(--color-accent)] px-3 py-1 text-xs font-medium text-white hover:bg-[var(--color-accent-hover)]"
               >
-                Download
+                {t("download")}
               </a>
             )}
           </div>

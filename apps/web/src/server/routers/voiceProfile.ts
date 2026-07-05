@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { TRPCError } from "@trpc/server"
+import type { Prisma } from "@prisma/client"
 import { router, protectedProcedure, adminProcedure } from "@/server/trpc"
 import { generatePresignedPutUrl, generatePresignedGetUrl } from "@/server/services/storage"
 import { enqueueIngestJob } from "@/server/queue/producers"
@@ -203,6 +204,87 @@ export const voiceProfileRouter = router({
 
       const url = await generatePresignedGetUrl(sample.storageKey, 300)
       return { url }
+    }),
+
+  // Create an empty profile from an exported training bundle (owned by the importer)
+  importProfile: protectedProcedure
+    .input(z.object({
+      name: z.string().min(1).max(100),
+      lang: z.enum(["vi", "en", "multi"]),
+      consentText: z.string().min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const profile = await ctx.db.voiceProfile.create({
+        data: {
+          ownerId: ctx.session.user.id,
+          name: input.name,
+          lang: input.lang,
+          consent: {
+            signedAt: new Date().toISOString(),
+            text: input.consentText,
+            userId: ctx.session.user.id,
+            ip: ctx.ip ?? null,
+            userAgent: ctx.userAgent ?? null,
+            importedAt: new Date().toISOString(),
+          },
+        },
+      })
+
+      await ctx.audit({
+        actorId: ctx.session.user.id,
+        action: "voiceProfile.import",
+        targetType: "VoiceProfile",
+        targetId: profile.id,
+        ip: ctx.ip,
+      })
+
+      return profile
+    }),
+
+  // Insert an already-scored sample directly (bypasses the ingest/scoring worker)
+  importSample: protectedProcedure
+    .input(z.object({
+      profileId: z.string(),
+      version: z.number().int().min(1),
+      storageKey: z.string(),
+      durationMs: z.number().int().min(0),
+      sampleRate: z.number().int().min(1),
+      qualityScore: z.number().int(),
+      qualityDetail: z.unknown().optional(),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const profile = await ctx.db.voiceProfile.findUniqueOrThrow({ where: { id: input.profileId } })
+      if (profile.ownerId !== ctx.session.user.id) throw new TRPCError({ code: "FORBIDDEN" })
+
+      // Only accept keys the importer just uploaded into this profile's upload space
+      if (!input.storageKey.startsWith(`uploads/${input.profileId}/`)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid storage key" })
+      }
+
+      const sample = await ctx.db.voiceSample.create({
+        data: {
+          profileId: input.profileId,
+          version: input.version,
+          storageKey: input.storageKey,
+          durationMs: input.durationMs,
+          sampleRate: input.sampleRate,
+          qualityScore: input.qualityScore,
+          qualityDetail: (input.qualityDetail ?? {}) as Prisma.InputJsonValue,
+          notes: input.notes ?? null,
+        },
+      })
+
+      await ctx.audit({
+        actorId: ctx.session.user.id,
+        action: "voiceProfile.importSample",
+        targetType: "VoiceProfile",
+        targetId: input.profileId,
+        meta: { version: input.version },
+        ip: ctx.ip,
+      })
+
+      return sample
     }),
 
   // Admin actions

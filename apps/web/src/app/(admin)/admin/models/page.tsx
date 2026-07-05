@@ -1,17 +1,17 @@
 import type { Metadata } from "next"
+import { getTranslations } from "next-intl/server"
 import { ModelCatalogManager } from "@/components/features/admin/ModelCatalogManager"
 
 export const metadata: Metadata = { title: "Admin — Models" }
 
-export default function AdminModelsPage() {
+export default async function AdminModelsPage() {
+  const t = await getTranslations("admin")
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-display-card">Model Catalog</h1>
+        <h1 className="text-display-card">{t("page.modelsTitle")}</h1>
         <p className="text-body text-[var(--color-text-secondary)] mt-1">
-          Pull the latest model list from each provider, then enable, edit, or mark a default.
-          For providers without a public listing endpoint (e.g. VieNeu, VoxCPM, VibeVoice) the
-          system seeds a curated catalog you can extend.
+          {t("page.modelsSubtitle")}
         </p>
       </div>
       <ModelCatalogManager />

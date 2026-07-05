@@ -2,6 +2,11 @@
 @import "tailwindcss";
 @import "./tokens.css";
 
+/* Class-based dark mode (paired with the ThemeProvider that toggles `.dark`
+   on <html>). Without this, Tailwind v4 `dark:` utilities key off the OS
+   media query instead of our explicit toggle. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-surface: var(--color-surface-0);
   --color-surface-muted: var(--color-surface-1);
@@ -33,9 +38,12 @@ html {
 }
 
 body {
-  background-color: var(--color-surface-0);
+  background-color: var(--color-surface-1);
   color: var(--color-text-primary);
   font-family: var(--font-body);
+  transition:
+    background-color var(--duration-med) var(--ease-standard),
+    color var(--duration-med) var(--ease-standard);
 }
 
 /* Focus ring that matches design system */

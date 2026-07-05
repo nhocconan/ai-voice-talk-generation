@@ -1,11 +1,15 @@
 import { getRequestConfig } from "next-intl/server"
+import type { AbstractIntlMessages } from "next-intl"
 import { cookies } from "next/headers"
 import enMessages from "../../../../messages/en.json"
 import viMessages from "../../../../messages/vi.json"
 
-const MESSAGES = {
-  en: enMessages,
-  vi: viMessages,
+// Cast because message catalogs contain list values (e.g. instruction steps as
+// arrays), which next-intl supports at runtime via `t.raw` but its strict
+// `AbstractIntlMessages` type disallows.
+const MESSAGES: Record<"en" | "vi", AbstractIntlMessages> = {
+  en: enMessages as unknown as AbstractIntlMessages,
+  vi: viMessages as unknown as AbstractIntlMessages,
 }
 
 export default getRequestConfig(async () => {

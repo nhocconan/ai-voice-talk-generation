@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useTranslations } from "next-intl"
 import { trpc } from "@/lib/trpc/client"
 
 const PAGE_SIZE = 50
@@ -11,6 +12,7 @@ function formatCsvValue(value: string) {
 }
 
 export function AuditLogTable() {
+  const t = useTranslations("admin")
   const [page, setPage] = useState(1)
   const [actor, setActor] = useState("")
   const [action, setAction] = useState("")
@@ -66,7 +68,7 @@ export function AuditLogTable() {
             setPage(1)
             setActor(event.target.value)
           }}
-          placeholder="Actor email or name"
+          placeholder={t("auditLog.actorPlaceholder")}
           className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2 text-body-ui"
         />
         <input
@@ -75,7 +77,7 @@ export function AuditLogTable() {
             setPage(1)
             setAction(event.target.value)
           }}
-          placeholder="Action contains..."
+          placeholder={t("auditLog.actionPlaceholder")}
           className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2 text-body-ui"
         />
         <input
@@ -102,7 +104,7 @@ export function AuditLogTable() {
             disabled={!data?.logs.length}
             className="flex-1 rounded-[var(--radius-pill)] border border-[var(--color-border)] px-3 py-2 text-caption disabled:opacity-40"
           >
-            Export CSV
+            {t("auditLog.exportCsv")}
           </button>
           <button
             onClick={() => {
@@ -114,7 +116,7 @@ export function AuditLogTable() {
             }}
             className="rounded-[var(--radius-pill)] border border-[var(--color-border)] px-3 py-2 text-caption"
           >
-            Reset
+            {t("auditLog.reset")}
           </button>
         </div>
       </div>
@@ -123,14 +125,14 @@ export function AuditLogTable() {
         className="overflow-hidden rounded-[var(--radius-card)]"
         style={{ border: "1px solid var(--color-border)" }}
       >
-        <table className="w-full text-caption">
+        <div className="overflow-x-auto"><table className="w-full text-caption">
           <thead style={{ background: "var(--color-surface-1)", borderBottom: "1px solid var(--color-border)" }}>
             <tr>
-              <th className="px-4 py-3 text-left text-[var(--color-text-muted)]">Time</th>
-              <th className="px-4 py-3 text-left text-[var(--color-text-muted)]">Actor</th>
-              <th className="px-4 py-3 text-left text-[var(--color-text-muted)]">Action</th>
-              <th className="px-4 py-3 text-left text-[var(--color-text-muted)]">Target</th>
-              <th className="px-4 py-3 text-left text-[var(--color-text-muted)]">IP</th>
+              <th className="px-4 py-3 text-left text-[var(--color-text-muted)]">{t("auditLog.colTime")}</th>
+              <th className="px-4 py-3 text-left text-[var(--color-text-muted)]">{t("auditLog.colActor")}</th>
+              <th className="px-4 py-3 text-left text-[var(--color-text-muted)]">{t("auditLog.colAction")}</th>
+              <th className="px-4 py-3 text-left text-[var(--color-text-muted)]">{t("auditLog.colTarget")}</th>
+              <th className="px-4 py-3 text-left text-[var(--color-text-muted)]">{t("auditLog.colIp")}</th>
             </tr>
           </thead>
           <tbody>
@@ -151,12 +153,12 @@ export function AuditLogTable() {
             {!data?.logs.length && !isFetching ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-[var(--color-text-muted)]">
-                  No audit entries match these filters.
+                  {t("auditLog.empty")}
                 </td>
               </tr>
             ) : null}
           </tbody>
-        </table>
+        </table></div>
       </div>
 
       <div className="flex items-center justify-between gap-3">
@@ -165,18 +167,18 @@ export function AuditLogTable() {
           onClick={() => setPage((current) => current - 1)}
           className="rounded-[var(--radius-pill)] border border-[var(--color-border)] px-3 py-1.5 text-caption disabled:opacity-40"
         >
-          ← Previous
+          ← {t("auditLog.previous")}
         </button>
         <span className="text-caption text-[var(--color-text-muted)]">
-          Page {page}
-          {isFetching ? " · refreshing..." : ""}
+          {t("auditLog.pageLabel", { page })}
+          {isFetching ? ` · ${t("auditLog.refreshing")}` : ""}
         </span>
         <button
           disabled={!data || data.logs.length < PAGE_SIZE}
           onClick={() => setPage((current) => current + 1)}
           className="rounded-[var(--radius-pill)] border border-[var(--color-border)] px-3 py-1.5 text-caption disabled:opacity-40"
         >
-          Next →
+          {t("auditLog.next")} →
         </button>
       </div>
     </div>

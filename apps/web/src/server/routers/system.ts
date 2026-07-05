@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server"
 import { router, adminProcedure, protectedProcedure } from "@/server/trpc"
 import { runHealthCheck, deriveFeatureMatrix } from "@/server/services/health"
 import { decryptApiKey } from "@/server/services/crypto"
+import { getAccessToken, isConnected } from "@/server/services/xai-oauth"
 
 export const systemRouter = router({
   health: adminProcedure.query(async () => {
@@ -113,6 +114,92 @@ export const systemRouter = router({
             return { ok: true, message: `xAI live. ${voices.length} voices reachable.` }
           } catch (e) {
             return { ok: false, message: `Could not reach xAI: ${String(e)}` }
+          }
+        }
+
+        case "GEMINI_LLM": {
+          if (!apiKey) throw new TRPCError({ code: "BAD_REQUEST", message: "API key required" })
+          try {
+            const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`)
+            if (!resp.ok) {
+              return { ok: false, message: `Google returned HTTP ${resp.status}. Verify the key at aistudio.google.com/apikey.` }
+            }
+            const data = await resp.json() as { models?: Array<{ name: string }> }
+            const count = data.models?.length ?? 0
+            return { ok: true, message: `Live. ${count} Gemini models reachable.` }
+          } catch (e) {
+            return { ok: false, message: `Could not reach Google API: ${String(e)}` }
+          }
+        }
+
+        case "GROQ": {
+          if (!apiKey) throw new TRPCError({ code: "BAD_REQUEST", message: "API key required" })
+          try {
+            const cfg = (provider.config ?? {}) as { baseUrl?: string }
+            const baseUrl = (cfg.baseUrl ?? "").trim().replace(/\/$/, "") || "https://api.groq.com/openai/v1"
+            const resp = await fetch(`${baseUrl}/models`, {
+              headers: { Authorization: `Bearer ${apiKey}` },
+            })
+            if (!resp.ok) {
+              return { ok: false, message: `Groq HTTP ${resp.status}. Check the key at console.groq.com/keys.` }
+            }
+            const data = (await resp.json()) as { data?: unknown[] }
+            return { ok: true, message: `Groq live. ${data.data?.length ?? 0} models reachable.` }
+          } catch (e) {
+            return { ok: false, message: `Could not reach Groq: ${String(e)}` }
+          }
+        }
+
+        case "XAI_LLM": {
+          if (!apiKey) throw new TRPCError({ code: "BAD_REQUEST", message: "API key required" })
+          try {
+            const resp = await fetch("https://api.x.ai/v1/models", {
+              headers: { Authorization: `Bearer ${apiKey}` },
+            })
+            if (!resp.ok) {
+              return { ok: false, message: `xAI HTTP ${resp.status}. Check the key at console.x.ai.` }
+            }
+            const data = (await resp.json()) as { data?: unknown[] }
+            return { ok: true, message: `xAI live. ${data.data?.length ?? 0} models reachable.` }
+          } catch (e) {
+            return { ok: false, message: `Could not reach xAI: ${String(e)}` }
+          }
+        }
+
+        case "GROK_OAUTH": {
+          try {
+            const cfg = (provider.config ?? {}) as Record<string, unknown>
+            if (!isConnected(cfg)) {
+              return { ok: false, message: "SuperGrok not connected. Use 'Connect SuperGrok' in Setup & config." }
+            }
+            const token = await getAccessToken(provider.id, cfg)
+            const resp = await fetch("https://api.x.ai/v1/models", {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+            if (!resp.ok) {
+              return { ok: false, message: `xAI HTTP ${resp.status}. Try reconnecting SuperGrok.` }
+            }
+            const data = (await resp.json()) as { data?: unknown[] }
+            return { ok: true, message: `SuperGrok live. ${data.data?.length ?? 0} models reachable.` }
+          } catch (e) {
+            return { ok: false, message: `Could not reach xAI via OAuth: ${String(e)}` }
+          }
+        }
+
+        case "OLLAMA": {
+          try {
+            const cfg = (provider.config ?? {}) as { baseUrl?: string }
+            const configured = (cfg.baseUrl ?? "").trim()
+            const base = configured !== "" ? configured : (process.env["OLLAMA_BASE_URL"] ?? "http://localhost:11434/v1")
+            const root = base.replace(/\/v1\/?$/, "").replace(/\/$/, "")
+            const resp = await fetch(`${root}/api/tags`)
+            if (!resp.ok) {
+              return { ok: false, message: `Ollama HTTP ${resp.status}. Is the server running at ${root}?` }
+            }
+            const data = (await resp.json()) as { models?: unknown[] }
+            return { ok: true, message: `Ollama live. ${data.models?.length ?? 0} local models.` }
+          } catch (e) {
+            return { ok: false, message: `Could not reach Ollama: ${String(e)}. Start it with 'ollama serve'.` }
           }
         }
 

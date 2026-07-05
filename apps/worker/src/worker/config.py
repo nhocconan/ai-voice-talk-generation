@@ -25,6 +25,35 @@ class Settings(BaseSettings):
     torch_device: str = "cpu"
     worker_concurrency: int = 1
 
+    # ASR model for faster-whisper. `large-v3-turbo` is ~8x faster than `large-v3`
+    # at near-identical WER — a better default for Mac CPU/MPS. Override with
+    # ASR_MODEL=large-v3 for maximum accuracy.
+    asr_model: str = "large-v3-turbo"
+    asr_compute_type: str = "auto"
+
+    # Expand Vietnamese numbers/dates/currency/etc. to spoken form before TTS
+    # (e.g. "123 tỷ" → "một trăm hai mươi ba tỷ"). On by default for vi content;
+    # dependency-free. Set VI_NORMALIZE=false to pass raw text to the engine.
+    vi_normalize: bool = True
+
+    # Animate audiogram captions word-by-word (aligns the rendered audio with
+    # faster-whisper). On by default; falls back to chapter captions if the
+    # aligner is unavailable. Preset: "pop" (active-word) or "karaoke" (sweep).
+    audiogram_word_captions: bool = True
+    caption_preset: str = "pop"
+
+    # Run Demucs vocal separation on enrollment clips before scoring (requires
+    # `uv sync --extra demucs`). Off by default — best-effort when enabled.
+    enroll_separate: bool = False
+
+    # Allow URL/YouTube audio ingest via yt-dlp (requires `uv sync --extra ingest`).
+    # Off by default — admins enable it knowing the ToS/abuse implications.
+    allow_url_ingest: bool = False
+
+    # DeepFilterNet denoise on enrollment clips before scoring (requires
+    # `uv sync --extra denoise`). Off by default — best-effort when enabled.
+    enroll_denoise: bool = False
+
     model_cache_dir: str = "./models"
 
     log_level: str = "INFO"

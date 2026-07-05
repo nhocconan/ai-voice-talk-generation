@@ -1,13 +1,16 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
+import { useTranslations } from "next-intl"
 import { trpc } from "@/lib/trpc/client"
 import { parseTimedScript } from "@/lib/timed-script"
 import { ProfileSelector } from "./ProfileSelector"
 import { ProviderSelector } from "./ProviderSelector"
 import { GenerationProgress } from "./GenerationProgress"
+import { EstimatedCost } from "./EstimatedCost"
 
 export function RevoiceGenerator() {
+  const t = useTranslations("generate")
   const [fileName, setFileName] = useState<string | null>(null)
   const [storageKey, setStorageKey] = useState("")
   const [uploading, setUploading] = useState(false)
@@ -85,7 +88,7 @@ export function RevoiceGenerator() {
         speakers,
       })
     } catch (error) {
-      setParseError(error instanceof Error ? error.message : "Timed script is invalid")
+      setParseError(error instanceof Error ? error.message : t("invalidTimedScript"))
     }
   }
 
@@ -96,7 +99,7 @@ export function RevoiceGenerator() {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-5 space-y-4">
-        <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">1. Upload Source Audio</h2>
+        <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">1. {t("uploadSourceAudio")}</h2>
         <div
           onClick={() => fileRef.current?.click()}
           className="flex cursor-pointer flex-col items-center rounded-[var(--radius-md)] border-2 border-dashed border-[var(--color-border)] p-8 text-center hover:border-[var(--color-accent)] transition-colors"
@@ -105,11 +108,11 @@ export function RevoiceGenerator() {
             <p className="text-sm text-[var(--color-text-primary)]">{fileName}</p>
           ) : (
             <>
-              <p className="text-sm text-[var(--color-text-secondary)]">Click to upload MP3 or M4A</p>
-              <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">Max 100MB</p>
+              <p className="text-sm text-[var(--color-text-secondary)]">{t("clickUploadAudio")}</p>
+              <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">{t("maxSize100")}</p>
             </>
           )}
-          {uploading && <p className="mt-2 text-xs text-[var(--color-accent)]">Uploading...</p>}
+          {uploading && <p className="mt-2 text-xs text-[var(--color-accent)]">{t("uploading")}</p>}
         </div>
         <input
           ref={fileRef}
@@ -122,11 +125,11 @@ export function RevoiceGenerator() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">2. Speaker A</h2>
+          <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">2. {t("speakerA")}</h2>
           <ProfileSelector value={profileAId} onChange={setProfileAId} />
         </div>
         <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">3. Speaker B</h2>
+          <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">3. {t("speakerB")}</h2>
           <ProfileSelector value={profileBId} onChange={setProfileBId} />
         </div>
       </div>
@@ -135,34 +138,37 @@ export function RevoiceGenerator() {
         <ProviderSelector
           value={providerId}
           onChange={setProviderId}
-          description="Use a specific provider for re-voicing when timing or similarity tests matter."
+          description={t("revoiceProviderHint")}
         />
       </div>
 
       <div className="space-y-3">
-        <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">4. Timed Script</h2>
+        <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">4. {t("timedScript")}</h2>
         <textarea
           value={script}
           onChange={(event) => setScript(event.target.value)}
           rows={10}
           className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] px-3 py-2 text-sm focus:border-[var(--color-accent)] focus:outline-none"
-          placeholder="[00:00 A] Opening line&#10;[00:06 B] Response"
+          placeholder={t("revoiceScriptPlaceholder")}
         />
         <p className="text-xs text-[var(--color-text-tertiary)]">
-          Paste the corrected transcript in <code>[MM:SS A] text</code> format before rendering.
+          {t("revoiceScriptHint")}
         </p>
       </div>
 
-      {parseError && <p className="text-sm text-red-500">{parseError}</p>}
-      {revoiceMutation.error && <p className="text-sm text-red-500">{revoiceMutation.error.message}</p>}
+      {parseError && <p className="text-sm text-[var(--color-danger)]">{parseError}</p>}
+      {revoiceMutation.error && <p className="text-sm text-[var(--color-danger)]">{revoiceMutation.error.message}</p>}
 
-      <button
-        type="submit"
-        disabled={revoiceMutation.isPending || uploading || !storageKey || !profileAId || !script.trim()}
-        className="rounded-[var(--radius-warm-btn)] bg-[var(--color-accent)] px-6 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
-      >
-        {revoiceMutation.isPending ? "Processing..." : `Re-voice Audio (${estimatedMinutes.toFixed(1)} min)`}
-      </button>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <button
+          type="submit"
+          disabled={revoiceMutation.isPending || uploading || !storageKey || !profileAId || !script.trim()}
+          className="rounded-[var(--radius-warm-btn)] bg-[var(--color-accent)] px-6 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
+        >
+          {revoiceMutation.isPending ? t("processing") : `${t("revoiceAudioBtn")} (${estimatedMinutes.toFixed(1)} ${t("minShort")})`}
+        </button>
+        <EstimatedCost providerId={providerId} minutes={estimatedMinutes} />
+      </div>
     </form>
   )
 }

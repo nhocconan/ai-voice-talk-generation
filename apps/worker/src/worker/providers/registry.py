@@ -48,6 +48,12 @@ def get_provider(
         case "XAI_TTS":
             from .xai import XAITTSProvider
             provider = XAITTSProvider(api_key_enc=api_key_enc, config=normalized_config)
+        case "KOKORO":
+            from .kokoro import KokoroProvider
+            provider = KokoroProvider(config=normalized_config)
+        case "INDEXTTS2":
+            from .indextts import IndexTTS2Provider
+            provider = IndexTTS2Provider(config=normalized_config)
         case _:
             raise ValueError(f"Unknown provider: {name}")
 
