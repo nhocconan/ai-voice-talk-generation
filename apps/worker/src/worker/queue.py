@@ -166,3 +166,18 @@ async def publish_progress(generation_id: str, phase: str, progress: float, mess
         await redis.publish(f"job:{generation_id}:events", payload)
     finally:
         await redis.aclose()
+
+
+async def publish_ingest_status(
+    profile_id: str, version: int, status: str, message: str = ""
+) -> None:
+    """Persist ingest status so the web `ingest-status` endpoint can poll it
+    (W-15). Ingest has no generation id, so a completed sample row appearing in
+    the DB is the success signal; this key makes RUNNING/FAILED explicit so the
+    app never waits forever on a failed enrollment. 24h TTL."""
+    redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+    try:
+        payload = json.dumps({"status": status, "message": message})
+        await redis.set(f"ingest:{profile_id}:{version}", payload, ex=86400)
+    finally:
+        await redis.aclose()

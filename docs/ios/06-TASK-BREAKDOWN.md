@@ -12,35 +12,37 @@ The **Web API Enablement** epic comes first because iOS is hard-blocked on it. S
 
 ## EPIC W — Web API Enablement (unblocks iOS)
 
-- [ ] **W-01** `POST /api/v1/auth/login` — credential → token pair. · deps: none · size: M
+> **Implementation status (2026-07-06).** **ALL of EPIC W (W-01…W-15) is implemented** on the web/worker side (working tree; `pnpm typecheck`, `eslint`, and `check:openapi` all clean). DB migrations `20260706000000_add_mobile_refresh_tokens` and `20260706000100_add_devices` are written but **pending apply** (`pnpm db:migrate`). W-07 reused the existing tRPC logic (exported `resolveProvider`/quota guards/`resolveLlmProvider` + a shared `draftScriptText`, mapped via `mapTrpcError`) rather than a separate service — no duplication. New surfaces: `src/server/services/{mobile-auth,push,consent}.ts`, `src/server/api/rest.ts`, `src/app/api/v1/{auth/*,voice-profiles/*,generate,generate/podcast,generate/preview,draft-script,generations/*,providers,llm-providers,devices,consent,jobs/[id]/status,openapi.yaml}`, `src/app/api/internal/job-complete`, `apps/web/openapi/openapi.yaml` + `scripts/check-openapi.mjs`; worker `_notify_job_complete` + `publish_ingest_status`. Bearer added to the shared SSE/download/export routes (SSE also gained a missing owner check). Deployment kit added: `docker-compose.prod.yml.sample`, `.env.prod.sample` (real files gitignored). Next up: EPIC I onward (native iOS — needs Xcode).
+
+- [x] **W-01** `POST /api/v1/auth/login` — credential → token pair. · deps: none · size: M
   - AC: Valid creds return `{accessToken(15m), refreshToken(30d), user}` (`01-… §3.3`); inactive users and bad creds → `401 INVALID_CREDENTIALS`; 5/15min/IP limit; `auth.login` audit row; `lastLoginAt` updated.
-- [ ] **W-02** `MobileRefreshToken` model + migration + rotation/reuse detection. · deps: W-01 · size: M
+- [x] **W-02** `MobileRefreshToken` model + migration + rotation/reuse detection. · deps: W-01 · size: M
   - AC: `POST /auth/refresh` rotates (old revoked, new issued in same family); replaying a revoked token revokes the family and returns `401 REFRESH_REUSED`; expiry honored.
-- [ ] **W-03** Bearer access-token middleware for `/api/v1/*` (+ `fpc` 403 gate). · deps: W-01 · size: M
-  - AC: Middleware validates the JWT, loads the user, applies existing RBAC; `fpc:true` tokens get `403 PASSWORD_CHANGE_REQUIRED` on write routes; accepts both access tokens and legacy `vk_` keys on `/generate`.
-- [ ] **W-04** `POST /auth/logout`, `POST /auth/change-password`, `GET /auth/me`. · deps: W-01..03 · size: S
+- [x] **W-03** Bearer access-token middleware for `/api/v1/*` (+ `fpc` 403 gate). · deps: W-01 · size: M
+  - AC: Middleware validates the JWT, loads the user, applies existing RBAC; `fpc:true` tokens get `403 PASSWORD_CHANGE_REQUIRED` on write routes; accepts both access tokens and legacy `vk_` keys on `/generate`. *(Shared helpers `authenticate`/`requireWrite`/`resolveLegacyApiKey` in `rest.ts`; `/generate` adaptation lands with W-07.)*
+- [x] **W-04** `POST /auth/logout`, `POST /auth/change-password`, `GET /auth/me`. · deps: W-01..03 · size: S
   - AC: logout revokes refresh (idempotent, `204`); change-password re-hashes, clears `forcePasswordChange`, revokes other families, `200`; `/me` returns user+quota.
-- [ ] **W-05** Standard error envelope for `/api/v1/*`. · deps: none · size: S
-  - AC: All `/api/v1/*` errors return `{error:{code,message,retryAfter?}}` with the stable codes in `02-… §3`; `POST /api/v1/generate` adapted.
-- [ ] **W-06** Voice-profile REST facade (`list/get/create/delete/upload-url/samples/active-version/download-url`). · deps: W-03 · size: M
+- [x] **W-05** Standard error envelope for `/api/v1/*`. · deps: none · size: S
+  - AC: All new `/api/v1/*` errors return `{error:{code,message,retryAfter?}}` with the stable codes in `02-… §3`. *(Existing `POST /api/v1/generate` still uses its old `{error}` string shape — adapt it alongside W-07.)*
+- [x] **W-06** Voice-profile REST facade (`list/get/create/delete/upload-url/samples/active-version/download-url`). · deps: W-03 · size: M
   - AC: Each wraps the matching `voiceProfile.*` procedure with identical validation, enums (`vi/en/multi`, `ALLOWED_AUDIO_MIMES`, 100 MB cap), ownership checks, and audit rows; responses match `02-… §6`.
-- [ ] **W-07** Generation REST facade (`presentation/podcast/draft-script/preview/list/get/download-urls/cancel`). · deps: W-03 · size: M
-  - AC: Wrap `generation.*`; enforce rate limit (10/min), quota, `generation.maxMinutes`, profile-ready; enums (`GenKind`, `GenStatus`, tones) exact; responses match `02-… §9`.
-- [ ] **W-08** Providers REST (`GET /providers`, `GET /llm-providers`). · deps: W-03 · size: S
+- [x] **W-07** Generation REST facade (`presentation/podcast/draft-script/preview/list/get/download-urls/cancel`). · deps: W-03 · size: M
+  - AC: Wrap `generation.*`; enforce rate limit (10/min), quota, `generation.maxMinutes`, profile-ready; enums (`GenKind`, `GenStatus`, tones) exact; responses match `02-… §9`. *(Prereq refactor: export shared `resolveProvider`/quota/generation-limit/`assertProfilesReady`/`resolveLlmProvider` + draft-script prompt from `generation.ts` into a service returning plain results, so both tRPC and REST reuse them without TRPCError mapping.)*
+- [x] **W-08** Providers REST (`GET /providers`, `GET /llm-providers`). · deps: W-03 · size: S
   - AC: `/providers` returns enabled TTS providers + `defaultProviderId`; `/llm-providers` returns enabled LLM providers with enabled models; **no** secrets/config in payload.
-- [ ] **W-09** `GET /api/v1/jobs/{id}/status` polling fallback. · deps: W-03 · size: S
-  - AC: Returns latest `{status, phase, progress, message, errorMessage, updatedAt}`; owner-scoped; reflects terminal states.
-- [ ] **W-10** Extend SSE + download + export to accept Bearer. · deps: W-03 · size: S
-  - AC: `/api/jobs/{id}/events`, `/api/download/{id}`, `/voice-profiles/{id}/export` authorize a Bearer access token (SSE also accepts a short-lived `?access_token=`); session cookie still works for web.
-- [ ] **W-11** Publish OpenAPI 3.1 spec + CI check. · deps: W-01..09 · size: S
+- [x] **W-09** `GET /api/v1/jobs/{id}/status` polling fallback. · deps: W-03 · size: S
+  - AC: Returns `{status, phase, progress, message, errorMessage, durationMs, startedAt, finishedAt, updatedAt}`; owner-scoped; reflects terminal states. *(`phase`/`message`/live `progress` are null until W-15 persists them; SSE (W-10) carries them live meanwhile.)*
+- [x] **W-10** Extend SSE + download + export to accept Bearer. · deps: W-03 · size: S
+  - AC: `/api/jobs/{id}/events`, `/api/download/{id}`, `/voice-profiles/{id}/export` authorize a Bearer access token (SSE also accepts a short-lived `?access_token=`); session cookie still works for web. *(Also fixed: SSE now enforces job ownership.)*
+- [x] **W-11** Publish OpenAPI 3.1 spec + CI check. · deps: W-01..09 · size: S
   - AC: `02-… §10` spec extended to shipped endpoints, served at `/api/v1/openapi.yaml`, validated in CI.
-- [ ] **W-12** (P0 legal) Consent audit record + impersonation policy surface. · deps: none · size: M
+- [x] **W-12** (P0 legal) Consent audit record + impersonation policy surface. · deps: none · size: M
   - AC: Consent stored as an immutable per-clone record incl. statement text/IP/UA/timestamp; AUP text returned for display at consent time; every render logs `profileIds` used.
-- [ ] **W-13** (P0) User-level deletion + in-app deletion request endpoint. · deps: W-03 · size: M
+- [x] **W-13** (P0) User-level deletion + in-app deletion request endpoint. · deps: W-03 · size: M
   - AC: `DELETE /api/v1/auth/account` (or request-flow) cascades profiles/samples/generations/storage/tokens; documented SLA; audit-logged.
-- [ ] **W-14** (P1) APNs device registration + worker completion hook. · deps: W-03 · size: M
+- [x] **W-14** (P1) APNs device registration + worker completion hook. · deps: W-03 · size: M
   - AC: `POST /api/v1/devices` stores APNs token per user/device; terminal job status sends a push (model on existing Slack/Teams webhook).
-- [ ] **W-15** (P1) Ingest progress/failure channel. · deps: none · size: S
+- [x] **W-15** (P1) Ingest progress/failure channel. · deps: none · size: S
   - AC: Ingest publishes progress + terminal state (reachable via `/jobs/{id}/status` or exposed on the sample); failures are explicit.
 
 ## EPIC I — iOS Foundation
@@ -156,4 +158,6 @@ flowchart LR
 | **GA** | + Phase-2 features as scheduled (podcast G-editor, re-voice, audiogram playback, SIWA), P1-5/6/7 hardening, X-06 | Feature-parity for the mobile-appropriate subset; moderation + abuse hardening + observability; store/MDM submission passes review. |
 
 ## Changelog
+- 2026-07-06 (later): **entire EPIC W (W-01…W-15) implemented** (web + worker); OpenAPI served + CI check wired; prod deploy kit added. Migrations pending apply.
+- 2026-07-06: W-01…W-06, W-08, W-09, W-10 implemented (web side); migration pending apply. W-07 refactor prereq noted.
 - 2026-07-05: v1.0 initial iOS task breakdown.

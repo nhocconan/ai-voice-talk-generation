@@ -1,14 +1,16 @@
 import { redirect } from "next/navigation"
-import { auth } from "@/server/auth"
+import { type NextRequest } from "next/server"
 import { db } from "@/server/db/client"
 import { generatePresignedGetUrl } from "@/server/services/storage"
+import { resolveSessionOrBearer } from "@/server/api/rest"
 
 export async function GET(
-  _request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await auth()
-  if (!session) {
+  // Accepts a web session cookie or a mobile Bearer access token (W-10).
+  const caller = await resolveSessionOrBearer(request)
+  if (!caller) {
     return new Response("Unauthorized", { status: 401 })
   }
 
@@ -27,8 +29,8 @@ export async function GET(
     return new Response("Not found", { status: 404 })
   }
 
-  const isAdmin = session.user.role === "ADMIN" || session.user.role === "SUPER_ADMIN"
-  if (!isAdmin && generation.userId !== session.user.id) {
+  const isAdmin = caller.role === "ADMIN" || caller.role === "SUPER_ADMIN"
+  if (!isAdmin && generation.userId !== caller.userId) {
     return new Response("Forbidden", { status: 403 })
   }
 

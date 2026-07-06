@@ -2,6 +2,10 @@
 .env
 .env.*
 !.env.example
+!.env.prod.sample
+
+# Production deploy — real files live only on the server, never committed.
+docker-compose.prod.yml
 
 # Dependencies
 node_modules/

@@ -1,13 +1,23 @@
 import { type NextRequest } from "next/server"
-import { auth } from "@/server/auth"
 import { env } from "@/env"
 import Redis from "ioredis"
+import { db } from "@/server/db/client"
+import { resolveSessionOrBearer } from "@/server/api/rest"
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth()
-  if (!session) return new Response("Unauthorized", { status: 401 })
+  // Accepts a web session cookie or a mobile Bearer access token — also as
+  // `?access_token=` since EventSource cannot set headers (W-10).
+  const caller = await resolveSessionOrBearer(req)
+  if (!caller) return new Response("Unauthorized", { status: 401 })
 
   const { id } = await params
+
+  // Authorize: the job must belong to the caller (or admin). Previously any
+  // signed-in user could subscribe to any job's event channel.
+  const gen = await db.generation.findUnique({ where: { id }, select: { userId: true } })
+  if (!gen) return new Response("Not found", { status: 404 })
+  const isAdmin = caller.role === "ADMIN" || caller.role === "SUPER_ADMIN"
+  if (!isAdmin && gen.userId !== caller.userId) return new Response("Forbidden", { status: 403 })
 
   const encoder = new TextEncoder()
   const redis = new Redis(env.REDIS_URL)

@@ -514,67 +514,8 @@ export const generationRouter = router({
       model: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const wordCount = Math.round(input.minutes * 130)
-      const toneMap = {
-        professional: "professional and clear",
-        conversational: "conversational and friendly",
-        educational: "educational and informative",
-        storytelling: "engaging and narrative",
-      }
-
-      const prompt = input.lang === "vi"
-        ? `Viết một kịch bản thuyết trình bằng tiếng Việt về chủ đề: "${input.topic}". Giọng điệu ${toneMap[input.tone]}. Độ dài khoảng ${wordCount} từ (tương đương ${input.minutes} phút khi đọc). Chỉ trả về văn bản kịch bản, không có tiêu đề hay chú thích.`
-        : `Write a presentation script in English on the topic: "${input.topic}". Tone: ${toneMap[input.tone]}. Length: approximately ${wordCount} words (equivalent to ${input.minutes} minutes when read aloud). Return only the script text, no headings or annotations.`
-
-      // 1/2: selected or default enabled LLM provider (with an enabled LLM model).
-      const llm = await resolveLlmProvider(ctx.db, input.providerId, input.model)
-
-      let script: string
-      let providerLabel: string
-      if (llm) {
-        try {
-          script = await draftScriptWithProvider({
-            providerName: llm.providerName,
-            providerId: llm.providerId,
-            apiKeyEnc: llm.apiKeyEnc,
-            config: llm.config,
-            model: llm.model,
-            prompt,
-          })
-        } catch (e) {
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Draft failed: ${String(e)}` })
-        }
-        providerLabel = llm.providerName
-      } else {
-        // 3: backward-compatible fallback to env Gemini so nothing breaks when no
-        // LLM provider is configured.
-        const apiKey = process.env["GOOGLE_API_KEY"]
-        if (!apiKey) {
-          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No LLM provider configured and Gemini API key not set" })
-        }
-        const resp = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
-            }),
-          },
-        )
-        if (!resp.ok) {
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Gemini API error" })
-        }
-        const data = await resp.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
-        if (!text) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Empty response from Gemini" })
-        script = text.trim()
-        providerLabel = "GEMINI_ENV"
-      }
-
+      const { script, providerLabel } = await draftScriptText(ctx.db, input)
       await ctx.audit({ actorId: ctx.session.user.id, action: "generation.draftScript", targetType: "User", targetId: ctx.session.user.id, meta: { topic: input.topic, minutes: input.minutes, provider: providerLabel } })
-
       return { script }
     }),
 
@@ -667,14 +608,14 @@ ${input.transcript}`
     }),
 })
 
-async function enforceRenderRateLimit(userId: string): Promise<void> {
+export async function enforceRenderRateLimit(userId: string): Promise<void> {
   const result = await checkFixedWindowLimit("render", userId, RENDER_RATE_LIMIT, RENDER_RATE_WINDOW_S)
   if (!result.allowed) {
     throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: `Rate limit: max ${RENDER_RATE_LIMIT} renders per minute` })
   }
 }
 
-async function enforceQuota(
+export async function enforceQuota(
   ctx: { db: typeof db; session: { user: { id: string } } },
   estimatedMinutes: number,
 ): Promise<void> {
@@ -687,7 +628,7 @@ async function enforceQuota(
   }
 }
 
-async function enforceGenerationLimit(
+export async function enforceGenerationLimit(
   prisma: typeof db,
   estimatedMinutes: number,
 ): Promise<void> {
@@ -705,7 +646,7 @@ async function enforceGenerationLimit(
   }
 }
 
-const LLM_PROVIDER_NAMES: ProviderName[] = [
+export const LLM_PROVIDER_NAMES: ProviderName[] = [
   ProviderName.GEMINI_LLM,
   ProviderName.GROQ,
   ProviderName.XAI_LLM,
@@ -774,7 +715,75 @@ async function resolveLlmProvider(
   }
 }
 
-async function resolveProvider(ctx: { db: typeof db }, providerId: string | undefined): Promise<string> {
+export interface DraftScriptInput {
+  topic: string
+  minutes: number
+  tone: "professional" | "conversational" | "educational" | "storytelling"
+  lang: "vi" | "en"
+  providerId?: string | undefined
+  model?: string | undefined
+}
+
+// Shared by the tRPC draftScript procedure and the REST /draft-script route.
+// Picks the selected/default LLM provider, else falls back to env Gemini.
+export async function draftScriptText(
+  prisma: typeof db,
+  input: DraftScriptInput,
+): Promise<{ script: string; providerLabel: string }> {
+  const wordCount = Math.round(input.minutes * 130)
+  const toneMap = {
+    professional: "professional and clear",
+    conversational: "conversational and friendly",
+    educational: "educational and informative",
+    storytelling: "engaging and narrative",
+  }
+  const prompt = input.lang === "vi"
+    ? `Viết một kịch bản thuyết trình bằng tiếng Việt về chủ đề: "${input.topic}". Giọng điệu ${toneMap[input.tone]}. Độ dài khoảng ${wordCount} từ (tương đương ${input.minutes} phút khi đọc). Chỉ trả về văn bản kịch bản, không có tiêu đề hay chú thích.`
+    : `Write a presentation script in English on the topic: "${input.topic}". Tone: ${toneMap[input.tone]}. Length: approximately ${wordCount} words (equivalent to ${input.minutes} minutes when read aloud). Return only the script text, no headings or annotations.`
+
+  const llm = await resolveLlmProvider(prisma, input.providerId, input.model)
+  if (llm) {
+    let script: string
+    try {
+      script = await draftScriptWithProvider({
+        providerName: llm.providerName,
+        providerId: llm.providerId,
+        apiKeyEnc: llm.apiKeyEnc,
+        config: llm.config,
+        model: llm.model,
+        prompt,
+      })
+    } catch (e) {
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Draft failed: ${String(e)}` })
+    }
+    return { script, providerLabel: llm.providerName }
+  }
+
+  // Backward-compatible fallback to env Gemini so nothing breaks when no LLM
+  // provider is configured.
+  const apiKey = process.env["GOOGLE_API_KEY"]
+  if (!apiKey) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No LLM provider configured and Gemini API key not set" })
+  }
+  const resp = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
+      }),
+    },
+  )
+  if (!resp.ok) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Gemini API error" })
+  const data = await resp.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
+  if (!text) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Empty response from Gemini" })
+  return { script: text.trim(), providerLabel: "GEMINI_ENV" }
+}
+
+export async function resolveProvider(ctx: { db: typeof db }, providerId: string | undefined): Promise<string> {
   if (providerId) {
     const p = await ctx.db.providerConfig.findFirst({ where: { id: providerId, enabled: true } })
     if (!p) throw new TRPCError({ code: "BAD_REQUEST", message: "Provider not available" })
@@ -792,7 +801,7 @@ function formatMs(ms: number): string {
   return `${minutes}:${seconds}`
 }
 
-async function assertProfilesReady(
+export async function assertProfilesReady(
   prisma: typeof db,
   profileIds: string[],
 ): Promise<void> {

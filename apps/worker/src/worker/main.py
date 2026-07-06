@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 from prometheus_client import Counter, Histogram, start_http_server
 
@@ -16,7 +17,7 @@ from .pipelines.ingest import run_ingest
 from .pipelines.render import run_render
 from .pipelines.video_revoice import run_video_revoice
 from .providers.registry import get_provider
-from .queue import QueueConsumer, publish_progress
+from .queue import QueueConsumer, publish_ingest_status, publish_progress
 from .tracing import setup_tracing, span
 
 setup_logging()
@@ -29,6 +30,25 @@ RENDER_DURATION = Histogram(
     "voice_render_duration_seconds", "Render duration", ["provider", "kind"]
 )
 INGEST_TOTAL = Counter("voice_ingest_total", "Total ingest jobs", ["status"])
+
+
+async def _notify_job_complete(generation_id: str) -> None:
+    """Tell the web app a render reached a terminal state so it can fire the
+    outbound webhook + APNs push (W-14). No-op unless web_base_url is set."""
+    base = settings.web_base_url.rstrip("/")
+    if not base:
+        return
+    token = settings.internal_api_token or settings.server_secret
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(
+                f"{base}/api/internal/job-complete",
+                headers={"x-internal-token": token, "content-type": "application/json"},
+                json={"generationId": generation_id},
+            )
+    except Exception as e:  # best-effort; never fail the job on notify
+        logger.warning("job-complete notify failed", generation_id=generation_id, error=str(e))
+
 
 # ---- DB helpers (minimal psycopg for worker updates) -----------------------
 
@@ -279,6 +299,7 @@ async def handle_ingest(job_name: str, data: object) -> None:
         raise TypeError(f"{job_name} expected IngestJobPayload")
 
     INGEST_TOTAL.labels(status="started").inc()
+    await publish_ingest_status(data.profile_id, data.version, "RUNNING", "Analyzing recording")
     with span("ingest.enroll", {"profile_id": data.profile_id, "version": data.version}):
         try:
             await run_ingest(
@@ -290,9 +311,11 @@ async def handle_ingest(job_name: str, data: object) -> None:
                 db_update_fn=_db_update_sample,
             )
             INGEST_TOTAL.labels(status="success").inc()
+            await publish_ingest_status(data.profile_id, data.version, "DONE", "Voice enrolled")
         except Exception as e:
             logger.error("Ingest job failed", error=str(e))
             INGEST_TOTAL.labels(status="failed").inc()
+            await publish_ingest_status(data.profile_id, data.version, "FAILED", str(e))
             raise
 
 
@@ -361,12 +384,14 @@ async def handle_render(job_name: str, data: object) -> None:
             RENDERS_TOTAL.labels(status="success", provider=provider_name).inc()
             RENDER_DURATION.labels(provider=provider_name, kind=kind).observe(time.monotonic() - t0)
             await publish_progress(generation_id, "DONE", 1.0, "Generation complete")
+            await _notify_job_complete(generation_id)
 
         except Exception as e:
             logger.error("Render failed", generation_id=generation_id, error=str(e))
             RENDERS_TOTAL.labels(status="failed", provider=provider_name).inc()
             await _db_render_failed(generation_id=generation_id, error=str(e))
             await publish_progress(generation_id, "FAILED", 0.0, str(e))
+            await _notify_job_complete(generation_id)
             raise
 
 

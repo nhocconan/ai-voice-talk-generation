@@ -55,6 +55,9 @@ jobs:
           MINIO_BUCKET: voice-studio
         run: pnpm typecheck
 
+      - name: Validate OpenAPI spec
+        run: node apps/web/scripts/check-openapi.mjs
+
   web-unit:
     name: Web Unit Tests
     runs-on: ubuntu-latest

@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     minio_bucket: str = "voice-studio"
 
     server_secret: str = "change_me_at_least_32_chars_long!!"
+    # Web app base URL + shared secret for the job-completion hook (W-14). When
+    # web_base_url is empty, completion notifications (webhook + APNs push) are
+    # skipped. internal_api_token falls back to server_secret on the web side.
+    web_base_url: str = ""
+    internal_api_token: str = ""
     hf_token: str = ""
     google_api_key: str = ""
     elevenlabs_api_key: str = ""

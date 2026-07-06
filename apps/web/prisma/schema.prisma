@@ -74,6 +74,8 @@ model User {
   auditLogs       AuditLog[]        @relation("AuditActor")
   workspaceMember WorkspaceMember[]
   apiKeys         ApiKey[]
+  mobileRefreshTokens MobileRefreshToken[]
+  devices             Device[]
 
   @@map("users")
 }
@@ -114,6 +116,42 @@ model ApiKey {
 
   @@index([userId])
   @@map("api_keys")
+}
+
+// Mobile auth (iOS EPIC W) — rotating refresh tokens with family reuse detection.
+// Access tokens are stateless HS256 JWTs; only refresh tokens are persisted.
+model MobileRefreshToken {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash    String    @unique // sha256 of the opaque refresh token
+  deviceName   String?
+  deviceId     String // app-generated stable UUID (Keychain)
+  familyId     String // rotation family; reuse-detection key
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String? // set when rotated
+  lastUsedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("mobile_refresh_tokens")
+}
+
+// Mobile push targets (iOS EPIC W-14) — one row per APNs device token.
+model Device {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apnsToken  String   @unique
+  platform   String   @default("ios")
+  appVersion String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("devices")
 }
 
 // ---------------------------------------------------------------------------

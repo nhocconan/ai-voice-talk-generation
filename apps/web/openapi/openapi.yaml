@@ -1,0 +1,571 @@
+openapi: 3.1.0
+info:
+  title: Voice Studio Mobile API
+  version: "1.0.0"
+  description: >
+    Versioned REST facade for the Voice Studio iOS app (EPIC W). Mobile clients
+    authenticate as the same User as the web app (shared account). Access tokens
+    are short-lived HS256 JWTs; refresh tokens rotate. See docs/ios/.
+servers:
+  - url: /api/v1
+    description: Versioned mobile API (relative to the app origin)
+security:
+  - bearerAuth: []
+tags:
+  - name: Auth
+  - name: Voice Profiles
+  - name: Generation
+  - name: Providers
+  - name: Jobs
+  - name: Devices
+  - name: Account
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Sign in with email + password, receive a token pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, deviceId]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+                deviceId: { type: string }
+                deviceName: { type: string }
+      responses:
+        "200":
+          description: Token pair + user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate the refresh token, receive a new pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken, deviceId]
+              properties:
+                refreshToken: { type: string }
+                deviceId: { type: string }
+      responses:
+        "200":
+          description: New token pair
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+        "401": { $ref: "#/components/responses/Error" }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke the presented refresh token (idempotent)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties: { refreshToken: { type: string } }
+      responses:
+        "204": { description: Revoked }
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Change password (accepted even when forcePasswordChange is set)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 8 }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { ok: { type: boolean } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "400": { $ref: "#/components/responses/Error" }
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user + quota (cold-start hydration)
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema: { type: object, properties: { user: { $ref: "#/components/schemas/User" } } }
+  /auth/account:
+    delete:
+      tags: [Account]
+      summary: Request account deletion (Apple 5.1.1(v)) — deactivates immediately
+      responses:
+        "200":
+          description: Deletion requested
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: deletion_requested }
+                  deactivated: { type: boolean }
+                  purgeSlaDays: { type: integer }
+  /consent:
+    get:
+      tags: [Voice Profiles]
+      summary: Voice-cloning consent (AUP) text to show before enrollment
+      parameters:
+        - { name: lang, in: query, schema: { type: string, enum: [vi, en] } }
+      responses:
+        "200":
+          description: Consent text
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version: { type: integer }
+                  text: { type: string }
+                  vi: { type: string }
+                  en: { type: string }
+  /voice-profiles:
+    get:
+      tags: [Voice Profiles]
+      summary: List owned + org-shared profiles
+      responses:
+        "200": { description: Profiles, content: { application/json: { schema: { type: object, properties: { profiles: { type: array, items: { $ref: "#/components/schemas/VoiceProfile" } } } } } } }
+    post:
+      tags: [Voice Profiles]
+      summary: Create a voice profile (with consent)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, lang, consentText]
+              properties:
+                name: { type: string, maxLength: 100 }
+                lang: { type: string, enum: [vi, en, multi] }
+                consentText: { type: string, minLength: 10 }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { type: object, properties: { profile: { $ref: "#/components/schemas/VoiceProfile" } } } } } }
+        "403": { $ref: "#/components/responses/Error" }
+  /voice-profiles/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Voice Profiles]
+      summary: Get one profile with samples
+      responses:
+        "200": { description: Profile, content: { application/json: { schema: { type: object, properties: { profile: { $ref: "#/components/schemas/VoiceProfile" } } } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Voice Profiles]
+      summary: Delete a profile (owner, unlocked)
+      responses:
+        "200": { description: Deleted }
+        "403": { $ref: "#/components/responses/Error" }
+  /voice-profiles/{id}/upload-url:
+    post:
+      tags: [Voice Profiles]
+      summary: Presigned PUT URL for a sample upload
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename, contentType, contentLength]
+              properties:
+                filename: { type: string }
+                contentType: { type: string }
+                contentLength: { type: integer, maximum: 104857600 }
+      responses:
+        "200": { description: Upload URL, content: { application/json: { schema: { type: object, properties: { uploadUrl: { type: string }, storageKey: { type: string } } } } } }
+  /voice-profiles/{id}/samples:
+    post:
+      tags: [Voice Profiles]
+      summary: Submit an uploaded sample for ingest/scoring
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [storageKey]
+              properties: { storageKey: { type: string }, notes: { type: string } }
+      responses:
+        "202": { description: Queued, content: { application/json: { schema: { type: object, properties: { version: { type: integer } } } } } }
+  /voice-profiles/{id}/active-version:
+    put:
+      tags: [Voice Profiles]
+      summary: Set the active sample version
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [version], properties: { version: { type: integer, minimum: 1 } } }
+      responses:
+        "200": { description: OK }
+        "404": { $ref: "#/components/responses/Error" }
+  /voice-profiles/{id}/samples/{version}/download-url:
+    get:
+      tags: [Voice Profiles]
+      summary: Presigned GET URL for a sample
+      parameters: [{ $ref: "#/components/parameters/Id" }, { $ref: "#/components/parameters/Version" }]
+      responses:
+        "200": { description: URL, content: { application/json: { schema: { type: object, properties: { url: { type: string } } } } } }
+  /voice-profiles/{id}/samples/{version}/ingest-status:
+    get:
+      tags: [Voice Profiles]
+      summary: Enrollment ingest status (DONE / RUNNING / FAILED / PENDING)
+      parameters: [{ $ref: "#/components/parameters/Id" }, { $ref: "#/components/parameters/Version" }]
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [DONE, RUNNING, FAILED, PENDING] }
+                  message: { type: string, nullable: true }
+                  qualityScore: { type: integer, nullable: true }
+  /voice-profiles/{id}/export:
+    get:
+      tags: [Voice Profiles]
+      summary: Export a profile as a .zip (manifest + sample audio)
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { description: Zip, content: { application/zip: { schema: { type: string, format: binary } } } }
+  /draft-script:
+    post:
+      tags: [Generation]
+      summary: Draft a presentation script via an LLM provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [topic, minutes]
+              properties:
+                topic: { type: string, minLength: 3, maxLength: 500 }
+                minutes: { type: number, minimum: 0.5, maximum: 30 }
+                tone: { type: string, enum: [professional, conversational, educational, storytelling] }
+                lang: { type: string, enum: [vi, en] }
+                providerId: { type: string }
+                model: { type: string }
+      responses:
+        "200": { description: Script, content: { application/json: { schema: { type: object, properties: { script: { type: string } } } } } }
+  /generate:
+    post:
+      tags: [Generation]
+      summary: Enqueue a PRESENTATION render
+      description: Accepts a mobile access token or a legacy `Bearer vk_` API key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profileId, script, estimatedMinutes]
+              properties:
+                profileId: { type: string }
+                script: { type: string, minLength: 10, maxLength: 500000 }
+                estimatedMinutes: { type: number, minimum: 0.1, maximum: 720 }
+                providerId: { type: string }
+                audiogram: { type: boolean }
+                audiogramTitle: { type: string }
+      responses:
+        "201": { $ref: "#/components/responses/GenerationCreated" }
+        "403": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /generate/podcast:
+    post:
+      tags: [Generation]
+      summary: Enqueue a PODCAST render (1–2 speakers)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [speakers, estimatedMinutes]
+              properties:
+                speakers:
+                  type: array
+                  minItems: 1
+                  maxItems: 2
+                  items: { $ref: "#/components/schemas/Speaker" }
+                estimatedMinutes: { type: number }
+                pacingLock: { type: boolean }
+                providerId: { type: string }
+                audiogram: { type: boolean }
+                audiogramTitle: { type: string }
+      responses:
+        "201": { $ref: "#/components/responses/GenerationCreated" }
+  /generate/preview:
+    post:
+      tags: [Generation]
+      summary: 15-second preview audition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profileId, script]
+              properties:
+                profileId: { type: string }
+                script: { type: string, minLength: 10 }
+                providerId: { type: string }
+      responses:
+        "200": { description: Preview URL, content: { application/json: { schema: { type: object, properties: { previewUrl: { type: string } } } } } }
+  /generations:
+    get:
+      tags: [Generation]
+      summary: List the caller's generations (paginated)
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, default: 20, maximum: 50 } }
+      responses:
+        "200":
+          description: Page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Generation" } }
+                  total: { type: integer }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+  /generations/{id}:
+    get:
+      tags: [Generation]
+      summary: Get one generation
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { description: Generation, content: { application/json: { schema: { type: object, properties: { generation: { $ref: "#/components/schemas/Generation" } } } } } }
+        "404": { $ref: "#/components/responses/Error" }
+  /generations/{id}/download-urls:
+    get:
+      tags: [Generation]
+      summary: Fresh presigned output URLs (DONE only)
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: URLs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mp3Url: { type: string, nullable: true }
+                  wavUrl: { type: string, nullable: true }
+                  videoUrl: { type: string, nullable: true }
+        "400": { $ref: "#/components/responses/Error" }
+  /generations/{id}/cancel:
+    post:
+      tags: [Generation]
+      summary: Cancel a QUEUED job
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { description: Cancelled }
+        "400": { $ref: "#/components/responses/Error" }
+  /providers:
+    get:
+      tags: [Providers]
+      summary: Enabled TTS providers + defaultProviderId
+      responses:
+        "200":
+          description: Providers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  providers: { type: array, items: { $ref: "#/components/schemas/Provider" } }
+                  defaultProviderId: { type: string, nullable: true }
+  /llm-providers:
+    get:
+      tags: [Providers]
+      summary: Enabled LLM providers with their enabled models
+      responses:
+        "200":
+          description: LLM providers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  providers: { type: array, items: { $ref: "#/components/schemas/LlmProvider" } }
+  /jobs/{id}/status:
+    get:
+      tags: [Jobs]
+      summary: Job status polling fallback
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { description: Status, content: { application/json: { schema: { $ref: "#/components/schemas/JobStatus" } } } }
+  /devices:
+    post:
+      tags: [Devices]
+      summary: Register an APNs device token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [apnsToken]
+              properties:
+                apnsToken: { type: string }
+                platform: { type: string }
+                appVersion: { type: string }
+      responses:
+        "201": { description: Registered }
+    delete:
+      tags: [Devices]
+      summary: Unregister an APNs device token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [apnsToken], properties: { apnsToken: { type: string } } }
+      responses:
+        "200": { description: Unregistered }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string } }
+    Version: { name: version, in: path, required: true, schema: { type: integer } }
+  responses:
+    Error:
+      description: Error envelope
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                properties:
+                  code: { type: string }
+                  message: { type: string }
+                  retryAfter: { type: integer }
+    GenerationCreated:
+      description: Job queued
+      content:
+        application/json:
+          schema: { type: object, properties: { generationId: { type: string } } }
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string }
+        name: { type: string }
+        role: { type: string, enum: [USER, ADMIN, SUPER_ADMIN] }
+        forcePasswordChange: { type: boolean }
+        quotaMinutes: { type: integer }
+        usedMinutes: { type: integer }
+    TokenPair:
+      type: object
+      properties:
+        accessToken: { type: string }
+        accessExpiresIn: { type: integer, example: 900 }
+        refreshToken: { type: string }
+        refreshExpiresIn: { type: integer, example: 2592000 }
+        user: { $ref: "#/components/schemas/User" }
+    VoiceProfile:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        lang: { type: string }
+        isOrgShared: { type: boolean }
+        isLocked: { type: boolean }
+        activeVersion: { type: integer }
+        samples: { type: array, items: { $ref: "#/components/schemas/VoiceSample" } }
+    VoiceSample:
+      type: object
+      properties:
+        version: { type: integer }
+        durationMs: { type: integer }
+        sampleRate: { type: integer }
+        qualityScore: { type: integer }
+    Speaker:
+      type: object
+      required: [label, profileId, segments]
+      properties:
+        label: { type: string, enum: [A, B] }
+        profileId: { type: string }
+        segments:
+          type: array
+          items:
+            type: object
+            properties:
+              startMs: { type: integer }
+              endMs: { type: integer }
+              text: { type: string }
+    Generation:
+      type: object
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [PRESENTATION, PODCAST, REVOICE, VIDEO_REVOICE, AUDIOGRAM] }
+        status: { type: string, enum: [QUEUED, RUNNING, DONE, FAILED, CANCELLED] }
+        durationMs: { type: integer, nullable: true }
+        createdAt: { type: string, format: date-time }
+    Provider:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        isDefault: { type: boolean }
+    LlmProvider:
+      allOf:
+        - $ref: "#/components/schemas/Provider"
+        - type: object
+          properties:
+            models:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  modelId: { type: string }
+                  displayName: { type: string }
+                  isDefault: { type: boolean }
+    JobStatus:
+      type: object
+      properties:
+        status: { type: string, enum: [QUEUED, RUNNING, DONE, FAILED, CANCELLED] }
+        phase: { type: string, nullable: true }
+        progress: { type: number, nullable: true }
+        message: { type: string, nullable: true }
+        errorMessage: { type: string, nullable: true }
+        durationMs: { type: integer, nullable: true }
+        updatedAt: { type: string, format: date-time, nullable: true }

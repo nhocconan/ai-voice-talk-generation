@@ -4,6 +4,8 @@ import createNextIntlPlugin from "next-intl/plugin"
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts")
 
 const nextConfig: NextConfig = {
+  // Standalone output for the production Docker image (infra/docker/web.Dockerfile).
+  output: "standalone",
   experimental: {},
   serverExternalPackages: ["pino", "pino-pretty"],
   images: {
