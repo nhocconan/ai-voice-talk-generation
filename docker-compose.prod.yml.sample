@@ -68,7 +68,7 @@ services:
     networks: [internal]
     logging: *default-logging
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-voice}"]
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-voice}", "-d", "${POSTGRES_DB:-voice_studio}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -160,21 +160,36 @@ services:
     build:
       context: .
       dockerfile: infra/docker/web.Dockerfile
+      args:
+        # Client var — baked into the bundle at build time.
+        NEXT_PUBLIC_APP_URL: https://${PUBLIC_HOST:-vc.dic.app}
     image: voice-studio-web:prod
     container_name: vc-web
     restart: unless-stopped
     env_file: .env.prod
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-voice_studio}
-      REDIS_URL: redis://redis:6379
-      WORKER_URL: http://worker:8001
+      # Use container_names (vc-postgres/vc-redis/vc-minio/vc-worker) — NOT the
+      # service names (postgres/redis/minio/worker). web is on the external
+      # traefik-network, which other projects also attach to, exposing THEIR
+      # `postgres`/`redis`/`minio`/`worker` DNS aliases. Docker DNS on a
+      # multi-network container would resolve those shadow hosts (wrong DB/queue)
+      # instead of ours. The vc-* container names are unique to this stack and
+      # resolve correctly on the internal network.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD}@vc-postgres:5432/${POSTGRES_DB:-voice_studio}
+      REDIS_URL: redis://vc-redis:6379
+      WORKER_URL: http://vc-worker:8001
       NEXT_PUBLIC_APP_URL: https://${PUBLIC_HOST:-vc.dic.app}
+      # Next.js standalone server.js binds to $HOSTNAME. Docker sets HOSTNAME to
+      # the container id, which resolves to only ONE network's IP — so the server
+      # listens on a single interface and the healthcheck (localhost) + Traefik
+      # (other network) can't reach it. Force-bind all interfaces.
+      HOSTNAME: 0.0.0.0
       # Presigned URLs use this host, so it must be reachable by the client.
-      # Default = internal `minio` (works server-side; NOT reachable from the
+      # Default = internal `vc-minio` (works server-side; NOT reachable from the
       # browser/app). Once MINIO_PUBLIC_HOST is set + its router enabled, also set
       # MINIO_PORT=443 and MINIO_USE_SSL=true in .env.prod.
-      MINIO_ENDPOINT: ${MINIO_PUBLIC_HOST:-minio}
+      MINIO_ENDPOINT: ${MINIO_PUBLIC_HOST:-vc-minio}
       MINIO_PORT: ${MINIO_PORT:-9000}
       MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
@@ -221,7 +236,9 @@ services:
     build:
       context: .
       dockerfile: infra/docker/worker.Dockerfile
+      # CPU stage — uses cloud LLM/TTS providers, no GPU needed.
       # For GPU hosts: target: cuda  (and add a device reservation below).
+      target: base
     image: voice-studio-worker:prod
     container_name: vc-worker
     restart: unless-stopped

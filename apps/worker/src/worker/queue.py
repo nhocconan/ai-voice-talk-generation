@@ -80,7 +80,12 @@ class QueueConsumer:
         self._handlers[job_name] = RegisteredHandler(handler=handler, payload_model=payload_model)
 
     async def start(self) -> None:
-        self._redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+        # socket_timeout must exceed the XREADGROUP `block` (5s) — redis-py 8.x's
+        # default read timeout is ~5s, so an idle blocking read would otherwise raise
+        # "Timeout reading from redis:6379" every poll cycle while the queue is empty.
+        self._redis = aioredis.from_url(
+            settings.redis_url, decode_responses=True, socket_timeout=10
+        )
         # Ensure consumer group exists
         with suppress(Exception):
             await self._redis.xgroup_create(self.stream_key, self.group, id="0", mkstream=True)

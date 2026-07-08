@@ -22,7 +22,7 @@ export default async function RevoicePage() {
           {t("revoiceSubtitle")}
         </p>
       </div>
-      <InstructionCard title={t("howItWorks")} steps={t.raw("revoiceSteps")} />
+      <InstructionCard title={t("howItWorks")} steps={t.raw("revoiceSteps") as string[]} />
       <FeatureGate featureId="generate.revoice">
         <RevoiceGenerator />
       </FeatureGate>

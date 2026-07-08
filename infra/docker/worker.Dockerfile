@@ -22,7 +22,7 @@ EXPOSE 8001 9090
 CMD ["uv", "run", "uvicorn", "worker.main:app", "--host", "0.0.0.0", "--port", "8001"]
 
 # ── CUDA stage ────────────────────────────────────────────────────────────────
-FROM nvidia/cuda:12.4.1-cudnn9-runtime-ubuntu22.04 AS cuda
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS cuda
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11 python3.11-dev python3-pip \

@@ -22,7 +22,7 @@ export default async function VideoRevoicePage() {
           {t("videoRevoiceSubtitle")}
         </p>
       </div>
-      <InstructionCard title={t("howItWorks")} steps={t.raw("videoRevoiceSteps")} />
+      <InstructionCard title={t("howItWorks")} steps={t.raw("videoRevoiceSteps") as string[]} />
       <FeatureGate featureId="generate.video-revoice">
         <VideoRevoiceGenerator />
       </FeatureGate>

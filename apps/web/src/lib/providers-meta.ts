@@ -1725,7 +1725,7 @@ function applyViOverrides(base: ProviderMeta, overrides: DeepPartial<ProviderMet
   if (overrides.configFields && base.configFields) {
     merged.configFields = mergeConfigFields(
       base.configFields,
-      overrides.configFields as DeepPartial<ProviderConfigField>[],
+      overrides.configFields,
     )
   }
   return merged

@@ -6,8 +6,8 @@ import { getTranslations } from "next-intl/server"
 
 export const metadata: Metadata = { title: "Admin — Help" }
 
-export const dynamic = "force-static"
-
+// Inherits `force-dynamic` from the admin layout (auth-gated), so do not mark
+// this page static — prerendering would run the auth layout without a session.
 async function loadManual(t: Awaited<ReturnType<typeof getTranslations>>): Promise<string> {
   const candidates = [
     path.resolve(process.cwd(), "../../docs/ADMIN_MANUAL.md"),

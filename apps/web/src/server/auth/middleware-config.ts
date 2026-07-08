@@ -47,4 +47,6 @@ export const middlewareAuthConfig: NextAuthConfig = {
   },
   session: { strategy: "jwt" },
   secret: process.env["AUTH_SECRET"] ?? "",
+  // Behind Traefik the Host header is external; trust it (matches authConfig).
+  trustHost: true,
 }

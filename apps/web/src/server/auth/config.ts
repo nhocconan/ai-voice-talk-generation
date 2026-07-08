@@ -121,4 +121,8 @@ export const authConfig: NextAuthConfig = {
   },
   session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
   secret: env.AUTH_SECRET,
+  // Production runs behind Traefik, which sets the Host header to PUBLIC_HOST.
+  // next-auth v5 does not auto-trust the request host in production, so without
+  // this every authenticated request throws UntrustedHost (login/cookies break).
+  trustHost: true,
 }

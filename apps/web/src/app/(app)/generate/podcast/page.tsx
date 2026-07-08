@@ -22,7 +22,7 @@ export default async function PodcastPage() {
           {t("podcastSubtitle")}
         </p>
       </div>
-      <InstructionCard title={t("howItWorks")} steps={t.raw("podcastSteps")} />
+      <InstructionCard title={t("howItWorks")} steps={t.raw("podcastSteps") as string[]} />
       <FeatureGate featureId="generate.podcast">
         <PodcastGenerator />
       </FeatureGate>

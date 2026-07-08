@@ -246,7 +246,7 @@ export function PresentationGenerator() {
         >
           {create.isPending ? t("queueing") : t("generateAudio")}
         </button>
-        <EstimatedCost providerId={providerId} minutes={Number(estimatedMinutes) || 0} />
+        <EstimatedCost providerId={providerId} minutes={estimatedMinutes || 0} />
       </div>
     </form>
   )

@@ -1,7 +1,9 @@
 import Redis from "ioredis"
 import { env } from "@/env"
 
-const redis = new Redis(env.REDIS_URL)
+// lazyConnect so importing this module (incl. at next build "collect page data"
+// time) does not open a TCP connection — it connects on first command instead.
+const redis = new Redis(env.REDIS_URL, { lazyConnect: true })
 
 export interface FixedWindowLimitResult {
   allowed: boolean

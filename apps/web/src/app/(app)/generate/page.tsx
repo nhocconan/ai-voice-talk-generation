@@ -16,7 +16,7 @@ export default async function GeneratePage() {
           {t("presentationSubtitle")}
         </p>
       </div>
-      <InstructionCard title={t("howItWorks")} steps={t.raw("presentationSteps")} />
+      <InstructionCard title={t("howItWorks")} steps={t.raw("presentationSteps") as string[]} />
       <FeatureGate featureId="generate.presentation">
         <PresentationGenerator />
       </FeatureGate>
