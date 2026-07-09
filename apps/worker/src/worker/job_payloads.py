@@ -44,6 +44,9 @@ class RenderOutputPayload(WorkerPayload):
     wav: bool = True
     chapters: bool = False
     audiogram: bool = False
+    audiogram_aspect: str = Field(default="1:1", alias="audiogramAspect")
+    # dark | midnight | forest | sunset | brand | slate
+    audiogram_theme: str = Field(default="dark", alias="audiogramTheme")
 
 
 class RenderJobPayload(WorkerPayload):

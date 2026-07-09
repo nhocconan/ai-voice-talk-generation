@@ -56,10 +56,10 @@ export function ProfileSelector({ selected, onSelect, value, onChange, exclude =
             type="button"
             onClick={() => handleSelect(p.id)}
             className={cn(
-              "flex items-center gap-3 p-3 rounded-[var(--radius-md)] border text-left transition-colors",
+              "flex items-center gap-3 p-3 rounded-[var(--radius-md)] border text-left cursor-pointer transition-colors",
               currentValue === p.id
                 ? "border-[var(--color-emphasis)] bg-[var(--color-surface-1)]"
-                : "border-[var(--color-border)] hover:bg-[var(--color-surface-1)]",
+                : "border-[var(--color-border)] hover:bg-[var(--color-surface-1)] hover:border-[var(--color-emphasis)]",
             )}
           >
             <div className="w-8 h-8 rounded-full bg-[var(--color-surface-1)] flex items-center justify-center shrink-0">

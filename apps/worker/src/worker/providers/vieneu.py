@@ -7,10 +7,46 @@ import tempfile
 from pathlib import Path
 from typing import Any, ClassVar
 
+import numpy as np
+import soundfile as sf
+
 from ..logging import get_logger
 from .base import AudioBytes, VoiceRef
 
 logger = get_logger("provider.vieneu")
+
+# Zero-shot cloning degrades when the reference is very long (model dilutes the
+# speaker embedding toward its training prior — often Northern VN for VieNeu).
+# Keep a short, speech-dense window for encode_reference.
+_REF_TARGET_SEC = 12.0
+_REF_MAX_SEC = 18.0
+
+
+def _trim_reference_clip(src: Path, dest: Path) -> tuple[Path, float]:
+    """Write a short mono clip optimized for zero-shot cloning.
+
+    Prefer a mid-recording window (enrollment intros often have silence / setup
+    talk), fall back to the start if the file is short.
+    """
+    audio, sr = sf.read(str(src), always_2d=False)
+    if getattr(audio, "ndim", 1) > 1:
+        audio = np.mean(audio, axis=1)
+    audio = np.asarray(audio, dtype=np.float32)
+    total_sec = float(len(audio) / sr) if sr else 0.0
+    if total_sec <= _REF_MAX_SEC:
+        if src.resolve() != dest.resolve():
+            sf.write(str(dest), audio, sr)
+            return dest, total_sec
+        return src, total_sec
+
+    win = int(_REF_TARGET_SEC * sr)
+    # Start ~20% into the clip so we skip countdown/silence, but leave a full window.
+    start = int(min(max(total_sec * 0.2, 0.0), max(total_sec - _REF_TARGET_SEC, 0.0)) * sr)
+    clip = audio[start : start + win]
+    if clip.size < int(3 * sr):  # pathological — fall back to head
+        clip = audio[:win]
+    sf.write(str(dest), clip, sr)
+    return dest, float(len(clip) / sr)
 
 
 class VieNeuProvider:
@@ -65,18 +101,33 @@ class VieNeuProvider:
         await self._load_client()
 
         if not samples:
+            logger.warning("VieNeu prepare_voice called with no samples — will use model default voice")
             return VoiceRef(provider_name=self.name, data={})
 
-        sample_path = str(samples[0])
+        raw_path = samples[0]
+        trimmed = raw_path.with_name(f"{raw_path.stem}_ref12s.wav")
+        try:
+            sample_path, used_sec = await asyncio.to_thread(_trim_reference_clip, raw_path, trimmed)
+            logger.info(
+                "VieNeu reference clip",
+                source=str(raw_path.name),
+                used_sec=round(used_sec, 2),
+                trimmed=sample_path != raw_path,
+            )
+        except Exception as exc:  # noqa: BLE001 — fall back to full file
+            logger.warning("VieNeu reference trim failed; using full sample", error=str(exc))
+            sample_path = raw_path
+
+        sample_path_str = str(sample_path)
         ref_text = self._reference_text()
 
         if self._mode() == "local":
-            encoded_voice = await asyncio.to_thread(self._tts.encode_reference, sample_path)  # type: ignore[union-attr]
+            encoded_voice = await asyncio.to_thread(self._tts.encode_reference, sample_path_str)  # type: ignore[union-attr]
             return VoiceRef(
                 provider_name=self.name,
                 data={
                     "encoded_voice": encoded_voice,
-                    "ref_audio": sample_path,
+                    "ref_audio": sample_path_str,
                     "ref_text": ref_text,
                 },
             )
@@ -84,7 +135,7 @@ class VieNeuProvider:
         return VoiceRef(
             provider_name=self.name,
             data={
-                "ref_audio": sample_path,
+                "ref_audio": sample_path_str,
                 "ref_text": ref_text,
             },
         )

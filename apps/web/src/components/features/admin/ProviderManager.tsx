@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useTranslations, useLocale } from "next-intl"
 import {
   BeakerIcon,
@@ -14,8 +14,40 @@ import {
 import { trpc } from "@/lib/trpc/client"
 import {
   type ProviderConfigField,
+  type ProviderMeta,
   getProviderMeta,
 } from "@/lib/providers-meta"
+
+/** Provider purpose lanes shown on /admin/providers. */
+type ProviderLane = "llm" | "tts_clone" | "tts_preset" | "other"
+
+const LLM_PROVIDER_NAMES = new Set([
+  "GEMINI_LLM",
+  "GROQ",
+  "XAI_LLM",
+  "GROK_OAUTH",
+  "OLLAMA",
+])
+
+function providerLane(name: string, meta: ProviderMeta | null | undefined): ProviderLane {
+  if (LLM_PROVIDER_NAMES.has(name) || meta?.supports.tts === false) return "llm"
+  if (meta?.supports.voiceCloning) return "tts_clone"
+  if (meta?.supports.tts) return "tts_preset"
+  return "other"
+}
+
+function laneBadgeStyle(lane: ProviderLane): { bg: string; fg: string; border: string } {
+  switch (lane) {
+    case "llm":
+      return { bg: "rgba(59,130,246,0.1)", fg: "var(--color-text-secondary)", border: "rgba(59,130,246,0.35)" }
+    case "tts_clone":
+      return { bg: "rgba(34,197,94,0.1)", fg: "var(--color-success)", border: "var(--color-success)" }
+    case "tts_preset":
+      return { bg: "rgba(249,115,22,0.1)", fg: "var(--color-text-secondary)", border: "rgba(249,115,22,0.4)" }
+    default:
+      return { bg: "var(--color-surface-1)", fg: "var(--color-text-muted)", border: "var(--color-border)" }
+  }
+}
 
 type DraftValue = string | boolean
 interface ProviderRow {
@@ -299,14 +331,38 @@ export function ProviderManager() {
     }
   }
 
-  const enabledProviders = (providers ?? []).filter((provider) => provider.enabled)
-  const availableProviders = (providers ?? []).filter((provider) => !provider.enabled)
+  const grouped = useMemo(() => {
+    const lanes: Record<ProviderLane, { enabled: ProviderRow[]; available: ProviderRow[] }> = {
+      llm: { enabled: [], available: [] },
+      tts_clone: { enabled: [], available: [] },
+      tts_preset: { enabled: [], available: [] },
+      other: { enabled: [], available: [] },
+    }
+    for (const provider of providers ?? []) {
+      const meta = getProviderMeta(provider.name, locale)
+      const lane = providerLane(provider.name, meta)
+      if (provider.enabled) lanes[lane].enabled.push(provider)
+      else lanes[lane].available.push(provider)
+    }
+    return lanes
+  }, [providers, locale])
+
   const renderProviderCard = (provider: ProviderRow) => {
         const meta = getProviderMeta(provider.name, locale)
+        const lane = providerLane(provider.name, meta)
+        const laneStyle = laneBadgeStyle(lane)
         const result = testResult[provider.id]
         const expanded = expandedId === provider.id
         const providerConfig = getProviderConfig(provider, meta?.defaultConfig)
-        const summary = configSummary(providerConfig, ["mode", "device", "model", "apiBase"])
+        const summary = configSummary(providerConfig, ["mode", "device", "model", "apiBase", "baseUrl"])
+        const laneLabel =
+          lane === "llm"
+            ? t("providers.laneLlmBadge")
+            : lane === "tts_clone"
+              ? t("providers.laneCloneBadge")
+              : lane === "tts_preset"
+                ? t("providers.lanePresetBadge")
+                : t("providers.laneOtherBadge")
 
         return (
           <div
@@ -319,9 +375,20 @@ export function ProviderManager() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-body-med">{meta?.name ?? provider.name}</h3>
                   <span className="text-micro text-[var(--color-text-muted)] font-mono">{provider.name}</span>
+                  <span
+                    className="text-micro px-2 py-0.5 rounded-full"
+                    style={{
+                      background: laneStyle.bg,
+                      color: laneStyle.fg,
+                      border: `1px solid ${laneStyle.border}`,
+                    }}
+                  >
+                    {laneLabel}
+                  </span>
                   {provider.isDefault && (
                     <span className="flex items-center gap-1 text-micro px-2 py-0.5 rounded-full bg-[var(--color-surface-1)]">
-                      <StarIcon size={10} /> {t("providers.default")}
+                      <StarIcon size={10} />{" "}
+                      {lane === "llm" ? t("providers.defaultLlm") : t("providers.defaultTts")}
                     </span>
                   )}
                   {provider.enabled ? (
@@ -363,8 +430,9 @@ export function ProviderManager() {
                   <button
                     onClick={() => update.mutate({ id: provider.id, isDefault: true })}
                     className="text-caption border border-[var(--color-border)] px-3 py-1.5 rounded-[var(--radius-pill)] hover:bg-[var(--color-surface-1)] transition-colors"
+                    title={lane === "llm" ? t("providers.setDefaultLlmHint") : t("providers.setDefaultTtsHint")}
                   >
-                    {t("providers.setDefault")}
+                    {lane === "llm" ? t("providers.setDefaultLlm") : t("providers.setDefaultTts")}
                   </button>
                 )}
                 {meta?.needsApiKey && (
@@ -620,10 +688,10 @@ export function ProviderManager() {
           </div>
         )
   }
-  const renderSection = (title: string, items: ProviderRow[]) => (
-    <section className="space-y-3">
+  const renderStatusGroup = (title: string, items: ProviderRow[]) => (
+    <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <h3 className="text-body-med text-[var(--color-text-primary)]">{title}</h3>
+        <h4 className="text-caption text-[var(--color-text-muted)] uppercase tracking-wide">{title}</h4>
         <span className="text-micro text-[var(--color-text-muted)]">{items.length}</span>
       </div>
       {items.length > 0 ? (
@@ -633,13 +701,34 @@ export function ProviderManager() {
           {t("providers.emptySection")}
         </p>
       )}
-    </section>
+    </div>
   )
 
+  const renderLane = (
+    lane: ProviderLane,
+    title: string,
+    description: string,
+  ) => {
+    const { enabled, available } = grouped[lane]
+    if (enabled.length === 0 && available.length === 0) return null
+    return (
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-body-med text-[var(--color-text-primary)]">{title}</h3>
+          <p className="text-caption text-[var(--color-text-secondary)] mt-1">{description}</p>
+        </div>
+        {renderStatusGroup(t("providers.enabledSection"), enabled)}
+        {renderStatusGroup(t("providers.availableSection"), available)}
+      </section>
+    )
+  }
+
   return (
-    <div className="space-y-8">
-      {renderSection(t("providers.enabledSection"), enabledProviders)}
-      {renderSection(t("providers.availableSection"), availableProviders)}
+    <div className="space-y-10">
+      {renderLane("llm", t("providers.laneLlmTitle"), t("providers.laneLlmHelp"))}
+      {renderLane("tts_clone", t("providers.laneCloneTitle"), t("providers.laneCloneHelp"))}
+      {renderLane("tts_preset", t("providers.lanePresetTitle"), t("providers.lanePresetHelp"))}
+      {renderLane("other", t("providers.laneOtherTitle"), t("providers.laneOtherHelp"))}
     </div>
   )
 }

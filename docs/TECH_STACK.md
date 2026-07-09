@@ -52,7 +52,7 @@ Pinned versions are intentional — see `CODING_GUIDELINES.md` for upgrade polic
 | App framework | FastAPI | 0.115+ | Health, admin ops, provider probing |
 | Queue consumer | Redis Streams | — | Explicit `XREADGROUP` consumers per queue |
 | Data validation | pydantic | 2.x | Worker validates queue payloads at the boundary |
-| Audio I/O | ffmpeg + pydub | — | ffmpeg is the workhorse; pydub for stitching |
+| Audio I/O | ffmpeg + pydub | — | ffmpeg is the workhorse; pydub for stitching. Must be built **with libass** — the audiogram burns ASS captions via the `ass`/`subtitles` filter, and a build without it silently drops the caption layer. The Debian ffmpeg in `infra/docker/worker.Dockerfile` has libass; the default macOS Homebrew formula does not. |
 | VAD | silero-vad | latest | Lightweight, CPU-friendly |
 | Loudness | pyloudnorm | latest | BS.1770 |
 | ASR | faster-whisper | latest (large-v3) | CTranslate2 backend |
@@ -169,6 +169,9 @@ SERVER_SECRET=<same as web, for API-key decryption>
 HF_TOKEN=<for pyannote>
 GOOGLE_API_KEY=<for Gemini, optional>
 ELEVENLABS_API_KEY=<optional, normally stored encrypted in DB via admin>
+MINIMAX_API_KEY=<optional, normally stored encrypted in DB via admin>
+XAI_API_KEY=<optional, normally stored encrypted in DB via admin>
+XIAOMI_API_KEY=<optional, normally stored encrypted in DB via admin>
 TORCH_DEVICE=mps|cuda|cpu
 WORKER_CONCURRENCY=1
 
@@ -181,3 +184,4 @@ WORKER_CONCURRENCY=1
 - 2026-04-19: v1.0 initial stack.
 - 2026-04-19: Updated queue transport to Redis Streams and aligned worker/web contract notes with the implementation.
 - 2026-04-20: Added VieNeu-TTS and VoxCPM2 to the supported provider matrix and local Mac deployment guidance.
+- 2026-07-09: Recorded `MINIMAX_API_KEY` / `XAI_API_KEY` / `XIAOMI_API_KEY` as optional worker env fallbacks, and ffmpeg-with-libass as a worker runtime requirement for audiogram captions. Working tree, pending commit.

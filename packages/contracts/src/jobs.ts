@@ -45,6 +45,9 @@ export interface RenderJobOutput {
   wav: boolean;
   chapters: boolean;
   audiogram?: boolean;
+  audiogramAspect?: "1:1" | "9:16" | "16:9";
+  /** Preset id: dark | midnight | forest | sunset | brand | slate */
+  audiogramTheme?: string;
 }
 
 export interface IngestJobData {

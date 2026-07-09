@@ -54,10 +54,15 @@ One-command local bootstrap is also available:
 
 The seed keeps `XTTS-v2` enabled by default for compatibility, but the current recommended provider lanes are:
 
+- `MiniMax Speech` as the primary cloud voice-cloning lane (no GPU required)
 - `VieNeu-TTS` for Mac-first Vietnamese local cloning
 - `VoxCPM2` for higher-quality comparison and future GPU promotion
 - `Xiaomi MiMo TTS` and `xAI Grok TTS` as cloud cloning fallbacks (no GPU required)
 - `ElevenLabs` and `Gemini TTS` as commercial cloud fallbacks
+
+## Social Video Export
+
+Any generation can also render an audiogram MP4 — animated gradient background, live waveform, progress bar, burned captions — in `1:1`, `9:16` (TikTok/Reels/Shorts), or `16:9` (YouTube). Enable it with the **Video (audiogram)** toggle on the generate pages; the file lands at `renders/<generationId>/audiogram.mp4` and is downloadable from the history list and any share link. Caption burning needs an ffmpeg built with libass (the Docker worker image has it; on macOS run `brew install ffmpeg`).
 
 Install the optional worker runtimes you need:
 
@@ -68,12 +73,13 @@ uv sync --extra voxcpm
 cd ../..
 ```
 
-Cloud providers (`Xiaomi`, `xAI`, `ElevenLabs`, `Gemini`) need no extras — only an API key. Either add it to `.env`:
+Cloud providers (`MiniMax`, `Xiaomi`, `xAI`, `ElevenLabs`, `Gemini`) need no extras — only an API key. Either add it to `.env`:
 
 ```bash
 XIAOMI_API_KEY=tp-…   # Token Plan key — auto-routes to token-plan-sgp.xiaomimimo.com
                       # sk-… keys auto-route to api.xiaomimimo.com
 XAI_API_KEY=xai-…
+MINIMAX_API_KEY=…     # primary cloud voice-cloning lane; default model speech-2.8-hd
 ```
 
 …or paste the key into Admin → Providers (recommended — stored encrypted in the DB).

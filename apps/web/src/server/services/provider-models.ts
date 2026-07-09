@@ -166,10 +166,10 @@ const CURATED: Partial<Record<ProviderName, CatalogModel[]>> = {
     },
   ],
   MINIMAX_TTS: [
-    { modelId: "speech-2.6-hd", displayName: "MiniMax Speech 2.6 HD", kind: "TTS", languages: ["vi", "en", "zh", "ja", "ko"] },
-    { modelId: "speech-2.6-turbo", displayName: "MiniMax Speech 2.6 Turbo", kind: "TTS", languages: ["vi", "en", "zh", "ja", "ko"] },
     { modelId: "speech-2.8-hd", displayName: "MiniMax Speech 2.8 HD", kind: "TTS", languages: ["vi", "en", "zh", "ja", "ko"] },
     { modelId: "speech-2.8-turbo", displayName: "MiniMax Speech 2.8 Turbo", kind: "TTS", languages: ["vi", "en", "zh", "ja", "ko"] },
+    { modelId: "speech-2.6-hd", displayName: "MiniMax Speech 2.6 HD (deprecated)", kind: "TTS", languages: ["vi", "en", "zh", "ja", "ko"] },
+    { modelId: "speech-2.6-turbo", displayName: "MiniMax Speech 2.6 Turbo (deprecated)", kind: "TTS", languages: ["vi", "en", "zh", "ja", "ko"] },
     { modelId: "speech-02-hd", displayName: "MiniMax Speech 02 HD", kind: "TTS", languages: ["vi", "en", "zh", "ja", "ko"] },
     { modelId: "speech-02-turbo", displayName: "MiniMax Speech 02 Turbo", kind: "TTS", languages: ["vi", "en", "zh", "ja", "ko"] },
   ],
@@ -220,4 +220,88 @@ export async function fetchProviderCatalog(
 
   const curated = CURATED[name] ?? []
   return { models: curated, source: "curated" }
+}
+
+export function getCuratedModels(name: ProviderName): CatalogModel[] {
+  return CURATED[name] ?? []
+}
+
+/**
+ * Seed curated ProviderModel rows when a provider has none yet.
+ * Enables "Enable Ollama → Draft with AI" without a separate Model Catalog trip.
+ * Prefer config.model as the default when present.
+ */
+export async function ensureCuratedModels(
+  prisma: {
+    providerModel: {
+      count: (args: { where: { providerId: string } }) => Promise<number>
+      upsert: (args: {
+        where: { providerId_modelId: { providerId: string; modelId: string } }
+        create: {
+          providerId: string
+          modelId: string
+          displayName: string
+          kind: ModelKind
+          languages: string[]
+          enabled: boolean
+          isDefault: boolean
+        }
+        update: Record<string, never>
+      }) => Promise<unknown>
+    }
+  },
+  providerId: string,
+  name: ProviderName,
+  config?: Record<string, unknown> | null,
+): Promise<number> {
+  const existing = await prisma.providerModel.count({ where: { providerId } })
+  if (existing > 0) return 0
+
+  const curated = getCuratedModels(name)
+  if (curated.length === 0) return 0
+
+  const preferred =
+    config && typeof config["model"] === "string" && config["model"].trim() !== ""
+      ? config["model"].trim()
+      : null
+
+  let seeded = 0
+  for (const m of curated) {
+    const isDefault = preferred ? m.modelId === preferred : seeded === 0
+    await prisma.providerModel.upsert({
+      where: { providerId_modelId: { providerId, modelId: m.modelId } },
+      create: {
+        providerId,
+        modelId: m.modelId,
+        displayName: m.displayName,
+        kind: m.kind,
+        languages: m.languages,
+        enabled: true,
+        isDefault,
+      },
+      update: {},
+    })
+    seeded += 1
+  }
+
+  // If config.model is not in the curated list, add it as the default.
+  if (preferred && !curated.some((m) => m.modelId === preferred)) {
+    const kind = curated[0]?.kind ?? "LLM"
+    await prisma.providerModel.upsert({
+      where: { providerId_modelId: { providerId, modelId: preferred } },
+      create: {
+        providerId,
+        modelId: preferred,
+        displayName: preferred,
+        kind,
+        languages: ["en", "vi"],
+        enabled: true,
+        isDefault: true,
+      },
+      update: {},
+    })
+    seeded += 1
+  }
+
+  return seeded
 }

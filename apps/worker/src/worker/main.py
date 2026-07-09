@@ -667,6 +667,11 @@ async def ingest_url(req: UrlIngestRequest):
 
 
 if __name__ == "__main__":
+    import os
+
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8001, reload=False)
+    # Local stack default is 3811 (see scripts/start-dev.sh). Keep 8001 as a
+    # backward-compatible fallback when WORKER_PORT is unset.
+    port = int(os.environ.get("WORKER_PORT", "8001"))
+    uvicorn.run(app, host="0.0.0.0", port=port, reload=False)

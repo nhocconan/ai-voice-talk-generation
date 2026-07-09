@@ -193,7 +193,8 @@ async function probeTTSProviders(): Promise<ServiceHealth[]> {
   const enabledWithKey = providers.filter((p) => {
     if (!p.enabled) return false
     if (p.apiKeyEnc) return true
-    return p.name === "VIENEU_TTS" || p.name === "VOXCPM2" || p.name === "XTTS_V2" || p.name === "F5_TTS"
+    // XTTS_V2 dropped (no stock Vietnamese). Local free lanes: VieNeu / VoxCPM2 / F5.
+    return p.name === "VIENEU_TTS" || p.name === "VOXCPM2" || p.name === "F5_TTS"
   })
 
   return [{

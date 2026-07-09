@@ -255,6 +255,37 @@ Features identified as missing or partial during PRD coverage audit.
 
 ---
 
+## Phase 6 — Social Video & Cloud Cloning (2026-07-09)
+
+Goal: audio generations can be published to platforms that reject bare audio files, and the cloud voice-cloning lane is verified.
+
+- [x] **P6-01** FR-23: audiogram social-video presets — 1:1 / 9:16 / 16:9, animated gradient background, bottom progress bar, `showwaves draw=full`. · verified 2026-07-09 · working tree, pending commit
+  - AC: `render_audiogram(aspect=…)` emits 1080×1080, 1080×1920, and 1920×1080 MP4s; unknown aspect falls back to 1:1. Verified by real renders probed with `ffprobe` for dimensions and duration. Background falls back to a solid `color` fill when ffmpeg lacks the `gradients` filter. On 9:16 the waveform keeps ≥320px clear at the bottom and ≥220px at the top.
+  - DoD: Universal, C.
+- [x] **P6-02** Fix: audiogram waveform was near-invisible (`showwaves` default `draw=scale`). · verified 2026-07-09 · working tree, pending commit
+  - AC: `tests/unit/test_audiogram.py::test_render_audiogram_waveform_is_actually_visible` decodes the waveform band of a rendered frame to raw gray and asserts peak luma > 180. Falsifying power confirmed: removing `draw=full` drops peak luma to 47 and the test fails. Bug pre-dated this phase.
+  - DoD: Universal, C.
+- [x] **P6-03** FR-23 (web): expose audiogram in the UI — toggle, title, aspect picker; video download + inline preview in history and on the public share page. · verified 2026-07-09 · working tree, pending commit
+  - AC: `PresentationGenerator` and `PodcastGenerator` send `audiogram`, `audiogramTitle`, `audiogramAspect`; the three create procedures accept them and forward them into the render job `output`. `GenerationHistoryList` and `/share/[token]` render a `<video>` player and a download link when `outputVideoKey` is set. Contract round-trip verified: web `audiogramAspect` → worker `audiogram_aspect`; omitted → `"1:1"`.
+  - DoD: Universal, A, B.
+- [x] **P6-04** FR-24: per-speaker Voice ID override shown for `XAI_TTS` and `MINIMAX_TTS` (payload key remains the legacy alias `xaiVoiceId`). · verified 2026-07-09 · working tree, pending commit
+  - AC: The override input renders for both providers with provider-neutral copy. Worker `render.py` maps a pinned `provider_voice_id` straight to a `VoiceRef` and skips reference cloning.
+  - DoD: Universal, B.
+- [x] **P6-05** MiniMax provider verification + model rotation to `speech-2.8-hd`. · verified 2026-07-09 · working tree, pending commit
+  - AC: Worker request flow (`files/upload` `purpose=voice_clone` → `voice_clone` → `t2a_v2`), hash-derived `voice_id` clone reuse, duplicate-id tolerance, and the 10 s–5 min / ≤20 MB source-audio constraints all match MiniMax's current published docs. Default model moved to `speech-2.8-hd` in the worker fallback, `defaultConfig`, and seed; `speech-2.6-*` labelled deprecated in the admin catalog. `MINIMAX_API_KEY` documented in `.env.example`. **Not live-tested** — no API key in this environment; an operator must press `Test` in `/admin/providers`.
+  - DoD: Universal, C, D, F.
+- [x] **P6-06** VieNeu-TTS local verification (clone + synthesis). · verified 2026-07-09 · working tree, pending commit
+  - AC: Real `prepare_voice` (encode_reference) + `synthesize` through `VieNeuProvider` on Apple Silicon with SDK `vieneu` 2.4.3 produced valid 24 kHz Vietnamese audio (~6 s from a 2-sentence script). Timings recorded in `docs/VOICE_PROVIDER_EVALUATION.md` as indicative, not a benchmark.
+  - DoD: Universal, C, F.
+- [x] **P6-07** Podcast 2-voice worker E2E with audiogram output. · verified 2026-07-09 · working tree, pending commit
+  - AC: Two distinct VieNeu voices cloned from two different reference clips, four alternating timed-script segments synthesized, crossfade-stitched, four ID3 chapters built from real per-segment durations, and rendered to a 1080×1920 audiogram MP4 (16.08 s). Waveform visibility confirmed by pixel inspection at 1:1, 9:16, and 16:9.
+  - DoD: Universal, C.
+- [x] **P6-08** Documentation sync for Phase 6. · verified 2026-07-09 · working tree, pending commit
+  - AC: `ARCHITECTURE.md` (diagram, provider list, job contract, audiogram filter-graph section, decision record), `PRD.md` (FR-23/FR-24, flows §5.2/§5.3), `ADMIN_MANUAL.md` (MiniMax runbook §2.5.1a, audiogram operator section §5.1, troubleshooting rows), `VOICE_PROVIDER_EVALUATION.md`, `TECH_STACK.md`, `README.md`, and this file all reflect shipped reality, with unverified claims labelled as such.
+  - DoD: F.
+
+---
+
 ## Tracking conventions
 
 - When you start a task: `[ ]` → `[~] @username YYYY-MM-DD`.
@@ -273,3 +304,4 @@ Example:
 - 2026-04-19: v1.2 mark P3-01 through P3-12 as done after Phase 3 implementation pass.
 - 2026-04-20: v1.3 add Phase 5 PRD gap-closure tasks P5-01 through P5-06, all verified.
 - 2026-04-20: v1.4 mark P5-07 and P5-08 as done for the VieNeu-TTS and VoxCPM2 provider refresh.
+- 2026-07-09: v1.5 add Phase 6 (P6-01 … P6-08) — audiogram social-video presets, the invisible-waveform fix, audiogram UI exposure, MiniMax verification + `speech-2.8-hd` rotation, VieNeu local verification, and the podcast 2-voice E2E.

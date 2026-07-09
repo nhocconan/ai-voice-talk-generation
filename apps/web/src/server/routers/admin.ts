@@ -1,9 +1,10 @@
 import { z } from "zod"
 import { router, adminProcedure, superAdminProcedure } from "@/server/trpc"
-import { ModelKind, Prisma, Role } from "@prisma/client"
+import { ModelKind, Prisma, ProviderName, Role } from "@prisma/client"
 import { TRPCError } from "@trpc/server"
 import { encryptApiKey, decryptApiKey, normalizeApiKey } from "@/server/services/crypto"
-import { fetchProviderCatalog } from "@/server/services/provider-models"
+import { ensureCuratedModels, fetchProviderCatalog } from "@/server/services/provider-models"
+import { LLM_PROVIDER_NAMES } from "@/server/routers/generation"
 import { getRecaptchaAdminView, saveRecaptchaConfig } from "@/server/services/recaptcha"
 import {
   generatePkce,
@@ -136,10 +137,13 @@ export const adminRouter = router({
       const data: Prisma.ProviderConfigUpdateInput = {}
       const existing = await ctx.db.providerConfig.findUnique({
         where: { id },
-        select: { config: true },
+        select: { name: true, config: true },
       })
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Provider not found" })
+
+      const isLlm = LLM_PROVIDER_NAMES.includes(existing.name)
       const currentConfig =
-        existing?.config && typeof existing.config === "object" && !Array.isArray(existing.config)
+        existing.config && typeof existing.config === "object" && !Array.isArray(existing.config)
           ? { ...(existing.config as Record<string, unknown>) }
           : {}
 
@@ -164,11 +168,28 @@ export const adminRouter = router({
       }
 
       if (rest.isDefault) {
-        // Only one can be default
-        await ctx.db.providerConfig.updateMany({ where: { id: { not: id } }, data: { isDefault: false } })
+        // Defaults are scoped per lane: one default TTS provider and one default LLM provider.
+        // Setting Ollama as default must not clear the TTS default (and vice versa).
+        await ctx.db.providerConfig.updateMany({
+          where: {
+            id: { not: id },
+            name: isLlm ? { in: LLM_PROVIDER_NAMES } : { notIn: LLM_PROVIDER_NAMES },
+          },
+          data: { isDefault: false },
+        })
       }
 
       await ctx.db.providerConfig.update({ where: { id }, data })
+
+      // Enabling an LLM provider with an empty catalog seeds curated models so
+      // "Draft with AI" can list them immediately (no Model Catalog trip required).
+      if (rest.enabled === true) {
+        const cfg =
+          rest.config !== undefined
+            ? (data.config as Record<string, unknown> | undefined) ?? currentConfig
+            : currentConfig
+        await ensureCuratedModels(ctx.db, id, existing.name as ProviderName, cfg)
+      }
 
       await ctx.audit({
         actorId: ctx.session.user.id,

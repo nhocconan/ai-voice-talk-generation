@@ -62,14 +62,28 @@ async function main() {
     },
   })
 
+  // Soft-dropped: stock Coqui XTTS-v2 has no Vietnamese. Keep the row for
+  // historical generations, but never enable it on seed.
   await prisma.providerConfig.upsert({
     where: { name: ProviderName.XTTS_V2 },
-    update: {},
+    update: {
+      enabled: false,
+      isDefault: false,
+      config: {
+        model: "tts_models/multilingual/multi-dataset/xtts_v2",
+        device: "mps",
+        deprecated: true,
+      },
+    },
     create: {
       name: ProviderName.XTTS_V2,
-      enabled: true,
-      isDefault: true,
-      config: { model: "xtts_v2", device: "mps" },
+      enabled: false,
+      isDefault: false,
+      config: {
+        model: "tts_models/multilingual/multi-dataset/xtts_v2",
+        device: "mps",
+        deprecated: true,
+      },
     },
   })
 
@@ -162,7 +176,7 @@ async function main() {
       enabled: false,
       isDefault: false,
       config: {
-        model: "speech-2.6-hd",
+        model: "speech-2.8-hd",
         voice: "Wise_Woman",
         format: "mp3",
         sampleRate: 32000,

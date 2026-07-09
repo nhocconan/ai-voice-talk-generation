@@ -13,10 +13,10 @@
 │  Next.js server (Node 22)        │    │  MinIO (S3-compat)   │
 │   · Route handlers / tRPC        │    │   · reference audio  │
 │   · Prisma + Postgres            │    │   · outputs mp3/wav  │
-│   · Redis Streams job producer   │    │   · presigned uploads│
-│   · Auth.js (email/pw invite)    │    └──────────────────────┘
-│   · Admin CP                     │
-└─────────┬──────────────────┬─────┘
+│   · Redis Streams job producer   │    │   · renders/<id>/    │
+│   · Auth.js (email/pw invite)    │    │     audiogram.mp4    │
+│   · Admin CP                     │    │   · presigned uploads│
+└─────────┬──────────────────┬─────┘    └──────────────────────┘
           │ enqueue          │ read/write
           ▼                  ▼
 ┌──────────────────┐   ┌────────────────────┐
@@ -55,6 +55,8 @@
 │   · LUFS normalize                                           │
 │   · Encode MP3 320k + WAV 24-bit                             │
 │   · ID3 tags + chapter markers (for podcasts)                │
+│   · Optional audiogram render (ffmpeg) → renders/<id>/       │
+│     audiogram.mp4 (1:1 / 9:16 / 16:9)                        │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -168,7 +170,8 @@ model ProviderConfig {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
-enum ProviderName { VIENEU_TTS VOXCPM2 XTTS_V2 F5_TTS ELEVENLABS GEMINI_TTS VIBEVOICE XIAOMI_TTS XAI_TTS }
+// TTS providers (the enum also carries LLM providers for the draft-script feature)
+enum ProviderName { VIENEU_TTS VOXCPM2 XTTS_V2 F5_TTS ELEVENLABS GEMINI_TTS VIBEVOICE XIAOMI_TTS XAI_TTS MINIMAX_TTS KOKORO INDEXTTS2 … }
 
 // P5-01 — Catalog of models advertised by each provider. Populated by the
 // admin "Fetch latest models" action (calls each provider's list-models
@@ -283,7 +286,13 @@ class TTSProvider(Protocol):
     async def close(self) -> None: ...
 ```
 
-Implementations now include `VieNeuProvider`, `VoxCPM2Provider`, `XTTSProvider`, `F5Provider`, `VibeVoiceProvider`, `XiaomiTTSProvider`, `XAITTSProvider`, `ElevenLabsProvider`, and `GeminiTTSProvider`. Each reads runtime settings from `provider_configs.config`, so the admin UI can change model, device, mode, or cloning options without code edits. The `/admin/providers` screen exposes provider docs links, setup steps, runtime config fields, and a live `Test` action backed by the worker `/provider-test` endpoint.
+Implementations now include `VieNeuProvider`, `VoxCPM2Provider`, `XTTSProvider`, `F5Provider`, `VibeVoiceProvider`, `XiaomiTTSProvider`, `XAITTSProvider`, `MiniMaxProvider`, `ElevenLabsProvider`, and `GeminiTTSProvider`. Each reads runtime settings from `provider_configs.config`, so the admin UI can change model, device, mode, or cloning options without code edits. The `/admin/providers` screen exposes provider docs links, setup steps, runtime config fields, and a live `Test` action backed by the worker `/provider-test` endpoint.
+
+`MiniMaxProvider` (`apps/worker/src/worker/providers/minimax.py`, `MINIMAX_TTS`) clones a voice via `files/upload` (`purpose=voice_clone`) → `voice_clone` → synthesizes via `t2a_v2`. It derives a deterministic `voice_id` from a SHA-1 hash of the reference clip so repeat renders of the same profile reuse the existing clone instead of paying the clone fee again, and treats a duplicate-id error from `voice_clone` as "clone already exists." Default model is `speech-2.8-hd`; MiniMax lists the `speech-2.6-*` family as deprecated and documents 2.8 as a drop-in replacement with an identical parameter interface. Existing `provider_configs` rows keep whatever model they were seeded with — the default applies to new installs and to configs that omit `model`.
+
+`XAITTSProvider` (`XAI_TTS`) only works as a pinned `customVoiceId` pass-through in this deployment — the `/v1/custom-voices` clone endpoint returns 403 (Enterprise-gated). See `docs/VOICE_PROVIDER_EVALUATION.md` for the full history.
+
+The per-speaker "Voice ID" override field in the web UI (payload key `xaiVoiceId`) is shown for both `XAI_TTS` and `MINIMAX_TTS` — the field name is a legacy alias from when it was xAI-only, not a new concept.
 
 **Model catalog (P5-01).** Each provider also owns rows in `provider_models`. `/admin/models` lets a super admin click *Fetch latest models* to call the provider's list-models endpoint (Gemini, ElevenLabs, xAI today) and upsert the result. Providers without a public listing endpoint seed from a curated default table — admins can still rename, mark default, enable/disable, or delete rows inline. The catalog table is consumed by provider implementations through `provider_configs.config.modelId`, so picking a different default flows through to the next render.
 
@@ -319,11 +328,13 @@ All jobs serialize to JSON in Redis Streams; worker deserializes via pydantic mo
     { "label": "A", "profileId": "cuid", "segments": [ ... ] },
     { "label": "B", "profileId": "cuid", "segments": [ ... ] }
   ],
-  "output": { "mp3": true, "wav": true, "chapters": true, "audiogram": false },
+  "output": { "mp3": true, "wav": true, "chapters": true, "audiogram": false, "audiogramAspect": "1:1" },
   "pacingLock": false,
   "audiogramTitle": "Optional title for the audiogram MP4"
 }
 ```
+
+`output.audiogramAspect` (TS: `RenderJobOutput.audiogramAspect?: "1:1" | "9:16" | "16:9"`, default `"1:1"`; worker: `RenderOutputPayload.audiogram_aspect`, pydantic alias `audiogramAspect`) selects the audiogram canvas. Web forwards it from the `createPresentation` / `createPodcast` / revoice-submit tRPC inputs into `output`. **`audiogramAspect` and `audiogramTitle` are not persisted to the `Generation` row** — they exist only in the render job payload for that one render; `Generation.audiogram` (the toggle itself) is the only one of the three that is a real Prisma column.
 
 ### 5.4 `render.video_revoice` (Mode B)
 ```json
@@ -342,7 +353,30 @@ All jobs serialize to JSON in Redis Streams; worker deserializes via pydantic mo
 The worker pipeline (`apps/worker/src/worker/pipelines/video_revoice.py`) downloads the source video, synthesizes each segment with the assigned speaker's voice, muxes the new track back into the source video via `ffmpeg` (`-c:v copy`, `-map 0:v:0 -map 1:a:0`), and optionally burns ASS subtitles. Audio side-products (MP3, WAV) are still uploaded so the user can download audio-only.
 
 ### 5.5 Audiogram (Mode A)
-Triggered inline when a render job carries `output.audiogram = true`. After the audio is encoded, `apps/worker/src/worker/audio/audiogram.py` calls `ffmpeg` with the `showwaves` filter to generate a square (1080×1080) MP4 with a moving waveform overlaid on a dark canvas. Per-chapter (or per-segment) captions are burned via ASS subtitles. Output is stored at `renders/{generationId}/audiogram.mp4` and written back to `Generation.outputVideoKey`.
+Triggered inline when a render job carries `output.audiogram = true`. After the audio is encoded, `apps/worker/src/worker/audio/audiogram.py` (`render_audiogram`) calls `ffmpeg` to generate a social-ready MP4 with a moving waveform overlaid on an animated dark canvas. Output is stored at `renders/{generationId}/audiogram.mp4` and written back to `Generation.outputVideoKey`.
+
+`aspect` selects the canvas: `"1:1"` → 1080×1080, `"9:16"` → 1080×1920 (TikTok/Reels/Shorts), `"16:9"` → 1920×1080 (YouTube). An unrecognized value falls back to `"1:1"`.
+
+**Filter graph layers** (built by `_build_filter_complex`), bottom to top:
+1. **Background** — an animated ffmpeg `gradients` source (two dark stops derived from `background_hex`), 30fps. Falls back to a static `color` fill when the running ffmpeg build lacks the `gradients` filter (`_has_ffmpeg_filter("gradients")` probes `ffmpeg -filters`).
+2. **Waveform** — `showwaves` in `mode=cline` at ≈H/4 tall, overlaid in the lower third (lower-middle on 9:16, keeping ≥320px clear at the bottom and ≥220px at the top for platform safe areas). Uses `draw=full`, not the ffmpeg default `draw=scale` — `draw=scale` shades each sample by amplitude, which renders the wave near-invisible against a dark background; this was a real bug found and fixed during this work.
+3. **Progress bar** — a 10px-tall `color` source overlaid at the bottom edge, its `x` position driven by a `t`-based expression so it grows left→right across the full audio duration (`duration_ms`, computed once by the render pipeline and passed in rather than re-measured).
+4. **Captions** — burned via a libass `ass`/`subtitles` filter chain. Word-level karaoke captions (from whisper-alignment, when `word_captions=true`) or segment/chapter captions, whichever was written to the `.ass` file.
+
+**libass caveat.** Caption burning requires an ffmpeg build with libass (the `ass` or `subtitles` filter). The production Docker image (`infra/docker/worker.Dockerfile`, Debian ffmpeg) has it. A bare ffmpeg build without libass — e.g. the default Homebrew formula on macOS — silently skips the caption layer and logs a warning (`Captions skipped: this ffmpeg build lacks libass...`); the rest of the video (background, waveform, progress bar) still renders.
+
+## Technical Decision — Audiogram video architecture (2026-07-09)
+
+This is the recorded rationale for how the audiogram video is built, not a benchmarked comparison of alternatives.
+
+**Options considered:**
+- **ffmpeg filter graph, in-worker** (chosen) — compose background/waveform/progress-bar/captions as one `-filter_complex` graph and shell out to the `ffmpeg` binary the worker already depends on.
+- **Remotion / headless-browser renderer** — define the video as a React component tree, render frames via a Node + Chromium pipeline.
+- **Hosted rendering service (e.g. Shotstack)** — send a render spec to a third-party API and poll for the output.
+
+**Choice:** ffmpeg filter graph, in-worker.
+
+**Rationale:** the worker already shells out to `ffmpeg` for every other audio/video step in this codebase, so this path adds no new runtime, dependency, or service to operate. It is CPU-cheap (no GPU/Chromium render farm) and deterministic (same filter graph, same inputs, same output bytes modulo codec nondeterminism). Remotion was rejected because it would require standing up a Node + Chromium render farm for a visual result (waveform + progress bar + burned captions) that ffmpeg's native filters already produce, and the projected render volume does not justify that operational cost. A hosted service was rejected for the same reason plus the added external dependency and per-render cost.
 
 Workers post progress events to Redis channel `job:<generationId>:events` as:
 ```json
@@ -411,3 +445,4 @@ Routes under `/admin`. SUPER_ADMIN sees all; ADMIN sees all except provider API 
 ## Changelog
 - 2026-04-19: v1.0 initial architecture.
 - 2026-04-20: Updated the provider architecture for VieNeu-TTS and VoxCPM2, and documented the live provider configuration flow in `/admin/providers`.
+- 2026-07-09: Documented `MiniMaxProvider` (`MINIMAX_TTS`); audiogram social-video presets (1:1/9:16/16:9), filter-graph pipeline, and libass caveat; the `audiogramAspect` job-contract field and its non-persistence to `Generation`; and the audiogram architecture decision record. Working tree, pending commit.

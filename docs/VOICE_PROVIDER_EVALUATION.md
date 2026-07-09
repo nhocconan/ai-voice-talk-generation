@@ -282,7 +282,26 @@ Field experience since April changed the picture:
 
 **Current recommendation (July 2026): MiniMax Speech as default provider; ElevenLabs as premium fallback; VieNeu-TTS as free local experiment lane.**
 
+## Update — 2026-07-09: VieNeu verified locally; MiniMax model family rotated
+
+**VieNeu-TTS verified working end to end** on Apple Silicon via the worker venv (`vieneu` SDK 2.4.3, model `pnnbao-ump/VieNeu-TTS`, local mode). Clone-from-reference and synthesis both produce correct 24 kHz Vietnamese audio, and a two-speaker podcast was rendered from two distinct reference clips.
+
+Timings measured on a single short reference clip on one Apple Silicon machine — indicative only, **not a benchmark**, and not comparable to the cloud lanes which are network-bound:
+
+| Step | Observed |
+|---|---|
+| `prepare_voice` (encode_reference), cold | ~13 s (first call also loads the model) |
+| `prepare_voice`, warm (second speaker) | ~0.2 s |
+| `synthesize`, short segment (1–2 sentences) | ~0.5–1.2 s |
+
+This does not change the recommendation: VieNeu remains the free local lane, because production runs on a shared CPU-only Linux host, not this machine.
+
+**MiniMax model family rotated.** MiniMax now lists `speech-2.6-hd` / `speech-2.6-turbo` as deprecated and documents `speech-2.8-hd` / `speech-2.8-turbo` as drop-in replacements with an identical parameter interface. The provider default (worker fallback, `defaultConfig`, and seed) moved to `speech-2.8-hd`; existing `provider_configs` rows are untouched and still carry `speech-2.6-hd` until an operator switches them in `/admin/providers`. The `$100/1M chars` figure in `provider-pricing.ts` is MiniMax's published HD rate and has **not** been re-verified against 2.8 list pricing.
+
+The MiniMax integration itself has **not been live-tested** in the dev environment — no `MINIMAX_API_KEY` is configured locally. Its request flow (`files/upload` → `voice_clone` → `t2a_v2`), the audio constraints it enforces (mp3/m4a/wav, 10 s–5 min, ≤20 MB), and its clone-reuse behaviour were verified by reading MiniMax's current documentation against the worker code, not by calling the API.
+
 ## Changelog
 
 - 2026-04-20: Initial evaluation memo recorded in the repo.
 - 2026-07-08: MiniMax Speech integrated and promoted to primary cloud voice-cloning lane; xAI demoted to customVoiceId pass-through.
+- 2026-07-09: VieNeu-TTS verified locally (clone + synthesis + 2-voice podcast). MiniMax `speech-2.6-*` recorded as deprecated; default moved to `speech-2.8-hd`. Working tree, pending commit.

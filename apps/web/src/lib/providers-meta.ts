@@ -235,64 +235,39 @@ export const PROVIDER_META: Record<string, ProviderMeta> = {
     ],
   },
   XTTS_V2: {
-    name: "Coqui XTTS v2 (community fork)",
-    shortName: "XTTS",
-    tagline: "Established local multilingual fallback. Kept for compatibility, not the primary Mac-first recommendation anymore.",
+    name: "Coqui XTTS v2 (DROPPED)",
+    shortName: "XTTS ✕",
+    tagline:
+      "DROPPED from this product. Stock Coqui XTTS-v2 has no Vietnamese, heavy deps, and CPML friction. Historical rows only — do not enable.",
     needsApiKey: false,
     docsLinks: [
-      { label: "Community Fork", url: "https://github.com/idiap/coqui-ai-TTS" },
-      { label: "Model", url: "https://huggingface.co/coqui/XTTS-v2" },
+      { label: "Why dropped", url: "https://github.com/idiap/coqui-ai-TTS" },
     ],
     supports: {
-      tts: true,
-      voiceCloning: true,
+      tts: false,
+      voiceCloning: false,
       asr: false,
       diarization: false,
       streaming: false,
       styleConditioning: false,
-      languages: ["vi", "en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh", "hu", "ko", "ja"],
+      languages: [],
     },
     setupSteps: [
-      "XTTS runs locally inside the worker; no API key is required.",
-      "The worker image already includes `TTS`. Model weights are downloaded on first use from Hugging Face.",
-      "Use `device=mps` on Apple Silicon or `device=cuda` on Linux GPU hosts.",
-      "Save config, Test, then enable. Keep it as a fallback local provider if VieNeu or VoxCPM2 are unavailable on the host.",
+      "Do not enable. Worker registry rejects XTTS_V2.",
+      "Vietnamese local screening → VieNeu-TTS.",
+      "Vietnamese production clone → MiniMax Speech, xAI Grok TTS, or ElevenLabs.",
+      "Multilingual open local (needs GPU) → VoxCPM2.",
     ],
     helpsWith: [
-      "Fallback local TTS when newer providers are unavailable",
-      "Legacy compatibility with existing test fixtures",
-      "General multilingual synthesis",
+      "Nothing — kept only so old generation history still resolves provider name",
     ],
     defaultConfig: {
       model: "tts_models/multilingual/multi-dataset/xtts_v2",
       device: "mps",
       maxChunkChars: 250,
+      deprecated: true,
     },
-    configFields: [
-      {
-        key: "model",
-        label: "Model",
-        input: "text",
-        description: "XTTS model path or registry name.",
-      },
-      {
-        key: "device",
-        label: "Preferred Device",
-        input: "select",
-        description: "The worker still validates the host device; use this to override the default.",
-        options: [
-          { value: "mps", label: "Apple Silicon (mps)" },
-          { value: "cpu", label: "CPU" },
-          { value: "cuda", label: "CUDA" },
-        ],
-      },
-      {
-        key: "maxChunkChars",
-        label: "Chunk Size",
-        input: "number",
-        description: "Maximum characters per chunk for the app chunker.",
-      },
-    ],
+    configFields: [],
   },
   F5_TTS: {
     name: "F5-TTS",
@@ -682,7 +657,7 @@ export const PROVIDER_META: Record<string, ProviderMeta> = {
     setupSteps: [
       "Create an account at platform.minimax.io, top up prepaid credit (no subscription needed), and create an API key under Account Management → API Keys.",
       "Paste the key below and use Test & Save — the worker calls POST /v1/get_voice to confirm the key works.",
-      "Pick a model: speech-2.6-hd is the verified Vietnamese default; the turbo variants are ~40% cheaper for drafts.",
+      "Pick a model: speech-2.8-hd is MiniMax's current HD model and a drop-in replacement for the deprecated speech-2.6-hd (identical parameters); the turbo variants are cheaper for drafts.",
       "Upload a clean 10 s–5 min reference clip to the voice profile. The worker clones it once (voice_id derived from the clip hash) and reuses the clone on later renders.",
       "Billing: ~$1.5 one-time per cloned voice (charged on first use) + T2A characters. MiniMax deletes clones unused for 7 days — the worker re-clones automatically on the next render.",
     ],
@@ -692,7 +667,7 @@ export const PROVIDER_META: Record<string, ProviderMeta> = {
       "Emotion, speed, and pitch controls via provider config",
     ],
     defaultConfig: {
-      model: "speech-2.6-hd",
+      model: "speech-2.8-hd",
       voice: "Wise_Woman",
       format: "mp3",
       sampleRate: 32000,
@@ -707,10 +682,10 @@ export const PROVIDER_META: Record<string, ProviderMeta> = {
         input: "select",
         description: "T2A model used for synthesis. HD favors quality; Turbo favors cost and speed.",
         options: [
-          { value: "speech-2.6-hd", label: "Speech 2.6 HD (Vietnamese verified)" },
-          { value: "speech-2.6-turbo", label: "Speech 2.6 Turbo" },
-          { value: "speech-2.8-hd", label: "Speech 2.8 HD (newest)" },
-          { value: "speech-2.8-turbo", label: "Speech 2.8 Turbo" },
+          { value: "speech-2.8-hd", label: "Speech 2.8 HD (current)" },
+          { value: "speech-2.8-turbo", label: "Speech 2.8 Turbo (current)" },
+          { value: "speech-2.6-hd", label: "Speech 2.6 HD (deprecated)" },
+          { value: "speech-2.6-turbo", label: "Speech 2.6 Turbo (deprecated)" },
           { value: "speech-02-hd", label: "Speech 02 HD (legacy)" },
           { value: "speech-02-turbo", label: "Speech 02 Turbo (legacy)" },
         ],
@@ -1160,10 +1135,10 @@ export const PROVIDER_META: Record<string, ProviderMeta> = {
       languages: ["en", "vi", "zh"],
     },
     setupSteps: [
-      "Install Ollama (ollama.com) and pull a model, e.g. `ollama pull qwen2.5:7b`.",
-      "Set the Base URL below to your Ollama OpenAI-compatible endpoint (default `http://localhost:11434/v1`).",
-      "Use Test & Save — the app pings the local tags endpoint to confirm the server is up.",
-      "Enable the provider and optionally mark it default for fully offline, free drafting.",
+      "Install Ollama (ollama.com) and pull a model, e.g. `ollama pull qwen2.5:7b` (or use a cloud tag like `kimi-k2.6:cloud`).",
+      "Set the Base URL below. Either `http://localhost:11434` or `http://localhost:11434/v1` works — the app normalizes to the OpenAI-compatible `/v1` path.",
+      "Use Test — the app pings the local tags endpoint to confirm the server is up.",
+      "Enable the provider and optionally mark it default for drafting. Models appear in Generate → Draft with AI.",
     ],
     helpsWith: [
       "Fully offline, zero-cost script drafting",
@@ -1179,14 +1154,16 @@ export const PROVIDER_META: Record<string, ProviderMeta> = {
         key: "baseUrl",
         label: "Base URL",
         input: "url",
-        description: "Ollama OpenAI-compatible base URL on the app host.",
-        placeholder: "http://localhost:11434/v1",
+        description:
+          "Ollama host as seen from the Next.js app. `http://localhost:11434` or `…/v1` both work; requests go to `/v1/chat/completions`.",
+        placeholder: "http://localhost:11434",
       },
       {
         key: "model",
-        label: "Model",
+        label: "Default model",
         input: "text",
-        description: "Local Ollama model tag used for drafting.",
+        description:
+          "Fallback Ollama model tag when the draft form does not pick one (e.g. `qwen2.5:7b` or `kimi-k2.6:cloud`).",
         placeholder: "qwen2.5:7b",
       },
     ],
@@ -1568,7 +1545,7 @@ const PROVIDER_META_VI_OVERRIDES: Record<string, DeepPartial<ProviderMeta>> = {
     setupSteps: [
       "Tạo tài khoản tại platform.minimax.io, nạp credit trả trước (không cần subscription), rồi tạo API key trong Account Management → API Keys.",
       "Dán key bên dưới và dùng Test & Save — worker gọi POST /v1/get_voice để xác nhận key hoạt động.",
-      "Chọn model: speech-2.6-hd là mặc định đã kiểm chứng tiếng Việt; bản turbo rẻ hơn ~40% cho bản nháp.",
+      "Chọn model: speech-2.8-hd là model HD hiện hành của MiniMax, thay thế trực tiếp cho speech-2.6-hd đã bị deprecated (tham số giống hệt); bản turbo rẻ hơn cho bản nháp.",
       "Tải clip tham chiếu sạch 10 giây–5 phút vào voice profile. Worker clone một lần (voice_id sinh từ hash của clip) và tái sử dụng clone ở các lần render sau.",
       "Chi phí: ~$1.5 một lần cho mỗi giọng clone (tính khi dùng lần đầu) + ký tự T2A. MiniMax xóa clone không dùng trong 7 ngày — worker tự clone lại ở lần render kế tiếp.",
     ],
@@ -1819,10 +1796,10 @@ const PROVIDER_META_VI_OVERRIDES: Record<string, DeepPartial<ProviderMeta>> = {
     tagline:
       "Chạy các LLM mở cục bộ với Ollama — hoàn toàn ngoại tuyến, không tốn phí. Endpoint tương thích OpenAI để soạn kịch bản.",
     setupSteps: [
-      "Cài Ollama (ollama.com) và tải một model, ví dụ `ollama pull qwen2.5:7b`.",
-      "Đặt Base URL bên dưới trỏ tới endpoint tương thích OpenAI của Ollama (mặc định `http://localhost:11434/v1`).",
-      "Dùng Test & Save — app gọi endpoint tags cục bộ để xác nhận server đang chạy.",
-      "Bật provider và tùy chọn đặt làm mặc định để soạn thảo hoàn toàn ngoại tuyến, miễn phí.",
+      "Cài Ollama (ollama.com) và tải một model, ví dụ `ollama pull qwen2.5:7b` (hoặc dùng cloud tag như `kimi-k2.6:cloud`).",
+      "Đặt Base URL bên dưới. `http://localhost:11434` hoặc `http://localhost:11434/v1` đều được — app tự chuẩn hóa sang path `/v1` tương thích OpenAI.",
+      "Dùng Test — app gọi endpoint tags cục bộ để xác nhận server đang chạy.",
+      "Bật provider và tùy chọn đặt làm mặc định soạn thảo. Model sẽ hiện trong Generate → Soạn nháp với AI.",
     ],
     helpsWith: [
       "Soạn kịch bản hoàn toàn ngoại tuyến, không tốn phí",
@@ -1832,11 +1809,13 @@ const PROVIDER_META_VI_OVERRIDES: Record<string, DeepPartial<ProviderMeta>> = {
     configFields: [
       {
         label: "Base URL",
-        description: "Base URL tương thích OpenAI của Ollama trên host của app.",
+        description:
+          "Host Ollama nhìn từ app Next.js. `http://localhost:11434` hoặc `…/v1` đều được; request đi tới `/v1/chat/completions`.",
       },
       {
-        label: "Model",
-        description: "Tag model Ollama cục bộ dùng để soạn thảo.",
+        label: "Model mặc định",
+        description:
+          "Tag model Ollama fallback khi form soạn nháp không chọn model (ví dụ `qwen2.5:7b` hoặc `kimi-k2.6:cloud`).",
       },
     ],
   },

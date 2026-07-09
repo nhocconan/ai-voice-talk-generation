@@ -23,9 +23,9 @@ Demo leadership produces internal presentations, podcasts, and announcements in 
 - Enroll a voice profile from 30–60s of reference audio (guided in-browser recording or batch upload), with multi-sample versioning.
 - Generate single-speaker presentations up to 60 minutes, Vietnamese or English.
 - Generate two-speaker podcasts from a timed script OR by re-voicing an uploaded podcast.
-- **Mode A — Audiogram output.** Any audio generation can produce a square MP4 with live waveform + transcript text overlay, ready for social sharing.
+- **Mode A — Audiogram output.** Any audio generation can produce an MP4 with a live waveform + transcript text overlay, ready for social sharing, in a choice of 3 aspect ratios (1:1 square, 9:16 vertical for TikTok/Reels/Shorts, 16:9 for YouTube) so the same audio can be posted to platforms that reject bare audio files.
 - **Mode B — Video re-voice.** Replace the voices in a NotebookLM-style podcast video (MP4/MOV/WebM/MKV) with cloned voices, preserving the original video frames and optionally burning captions.
-- Support pluggable TTS providers: local-first (`VieNeu-TTS`, `VoxCPM2`, `XTTS-v2`, `F5-TTS`, `VibeVoice`) + cloud (`ElevenLabs`, `Gemini TTS`, `Xiaomi MiMo TTS`, `xAI Grok TTS`). Super Admin configures active provider and can pull the latest model catalog from each provider's API.
+- Support pluggable TTS providers: local-first (`VieNeu-TTS`, `VoxCPM2`, `XTTS-v2`, `F5-TTS`, `VibeVoice`) + cloud (`MiniMax Speech`, `ElevenLabs`, `Gemini TTS`, `Xiaomi MiMo TTS`, `xAI Grok TTS`). Super Admin configures active provider and can pull the latest model catalog from each provider's API.
 - Invite-only authentication. Default super admin seeded: `admin@demo.demo` / `Demo1234`.
 - Full Admin Control Panel with CRUD over users, providers, **model catalog**, voice library, generations, storage, retention, audit log.
 - Output MP3 + WAV with ID3 chapter markers for podcasts; MP4 for audiograms and video re-voice.
@@ -64,9 +64,10 @@ Demo leadership produces internal presentations, podcasts, and announcements in 
 1. User picks a profile.
 2. Input script: type, paste, or click **Draft with Gemini** (enter topic + target minutes + tone).
 3. Preview first 15 seconds (fast synth).
-4. If happy, submit full render → job queued.
-5. Progress bar (queue position, estimated time). Push updates via SSE.
-6. On completion: player, download MP3/WAV, share link (expires per retention policy).
+4. Optional: toggle **Video (audiogram)**, set a title, and pick an aspect ratio (1:1 / 9:16 / 16:9).
+5. If happy, submit full render → job queued.
+6. Progress bar (queue position, estimated time). Push updates via SSE.
+7. On completion: player, download MP3/WAV (+ MP4 if audiogram was enabled), share link (expires per retention policy).
 
 ### 5.3 Podcast Generation (Two Speakers, Script Path)
 1. User picks podcast mode, assigns Profile A and Profile B.
@@ -76,7 +77,8 @@ Demo leadership produces internal presentations, podcasts, and announcements in 
    [00:18 B] Thanks for having me…
    ```
 3. System validates: balanced tags, no overlaps, total duration sane.
-4. Preview → full render. Stitcher crossfades 80 ms between segments. Adds ID3 chapter markers at each speaker-turn boundary (opt-in).
+4. Optional: toggle **Video (audiogram)**, set a title, and pick an aspect ratio (1:1 / 9:16 / 16:9).
+5. Preview → full render. Stitcher crossfades 80 ms between segments. Adds ID3 chapter markers at each speaker-turn boundary (opt-in).
 
 ### 5.4 Re-Voicing an Existing Podcast (Audio Path)
 1. User uploads mp3/m4a reference (e.g., NotebookLM export).
@@ -115,6 +117,8 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md#admin-cp) for surface list. Invite user 
 | FR-20 | Profile lock (leadership profiles can't be deleted by owner alone) | Should |
 | FR-21 | Public share links for generations (time-limited, revocable) | Could |
 | FR-22 | Slack/Teams webhook on generation complete | Could |
+| FR-23 | Audiogram video export selectable in 3 aspect ratios (1:1, 9:16, 16:9) so audio can be posted to platforms that reject bare audio | Should |
+| FR-24 | Per-speaker Voice ID override for cloud providers that key voices by ID (currently `XAI_TTS`, `MINIMAX_TTS`) | Should |
 
 ## 7. Non-Functional Requirements
 
@@ -168,3 +172,4 @@ Track new questions here; close with a decision + PR link.
 ## Changelog
 - 2026-04-19: v1.0 initial draft.
 - 2026-04-20: Refreshed the provider strategy around VieNeu-TTS as the main Mac-first lane and VoxCPM2 as the advanced-quality lane.
+- 2026-07-09: Added FR-23 (audiogram aspect-ratio export) and FR-24 (per-speaker Voice ID override) after the audiogram social-video and MiniMax/VieNeu provider work; updated §5.2/5.3 flows with the audiogram toggle + aspect picker step. Working tree, pending commit.

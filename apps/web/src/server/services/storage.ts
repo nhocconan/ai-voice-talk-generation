@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3"
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3"
 import crypto from "crypto"
 import { env } from "@/env"
 
@@ -92,4 +92,31 @@ export function putObject(key: string, body: Buffer, contentType?: string) {
   return s3.send(
     new PutObjectCommand({ Bucket: env.MINIO_BUCKET, Key: key, Body: body, ContentType: contentType }),
   )
+}
+
+/** Best-effort delete; missing keys are ignored so purge stays idempotent. */
+export async function deleteObject(key: string): Promise<void> {
+  try {
+    await s3.send(new DeleteObjectCommand({ Bucket: env.MINIO_BUCKET, Key: key }))
+  } catch {
+    // Object may already be gone — DB row is the source of truth for the UI.
+  }
+}
+
+/** Delete render artifacts (audio + video) for a generation. */
+export async function deleteGenerationAssets(keys: {
+  outputMp3Key?: string | null
+  outputWavKey?: string | null
+  outputVideoKey?: string | null
+  sourceAudioKey?: string | null
+  sourceVideoKey?: string | null
+}): Promise<void> {
+  const list = [
+    keys.outputMp3Key,
+    keys.outputWavKey,
+    keys.outputVideoKey,
+    keys.sourceAudioKey,
+    keys.sourceVideoKey,
+  ].filter((k): k is string => typeof k === "string" && k.length > 0)
+  await Promise.all(list.map((k) => deleteObject(k)))
 }

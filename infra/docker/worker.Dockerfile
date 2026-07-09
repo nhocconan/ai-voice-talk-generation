@@ -1,16 +1,19 @@
 # ── CPU stage (default) ───────────────────────────────────────────────────────
 FROM python:3.11-slim AS base
 
+# ffmpeg (Debian) ships with libass → ASS caption burn works natively.
+# fonts-dejavu + fonts-noto for Vietnamese diacritics on Pillow caption fallback.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg libsndfile1 git curl build-essential \
+    fonts-dejavu-core fonts-noto-core \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir uv==0.5.26
 
 WORKDIR /app
-COPY apps/worker/pyproject.toml apps/worker/
+COPY apps/worker/pyproject.toml apps/worker/uv.lock apps/worker/
 ARG WORKER_EXTRAS=""
-RUN cd apps/worker && if [ -n "$WORKER_EXTRAS" ]; then uv sync --no-dev $WORKER_EXTRAS; else uv sync --no-dev; fi
+RUN cd apps/worker && if [ -n "$WORKER_EXTRAS" ]; then uv sync --frozen --no-dev $WORKER_EXTRAS; else uv sync --frozen --no-dev; fi
 
 COPY apps/worker/src/ apps/worker/src/
 
@@ -27,15 +30,16 @@ FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS cuda
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11 python3.11-dev python3-pip \
     ffmpeg libsndfile1 git curl build-essential \
+    fonts-dejavu-core fonts-noto-core \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python3.11 -m pip install --no-cache-dir uv==0.5.26
 
 WORKDIR /app
-COPY apps/worker/pyproject.toml apps/worker/
+COPY apps/worker/pyproject.toml apps/worker/uv.lock apps/worker/
 ARG WORKER_EXTRAS=""
 # Install with GPU torch extras
-RUN cd apps/worker && if [ -n "$WORKER_EXTRAS" ]; then uv sync --no-dev $WORKER_EXTRAS || uv sync --no-dev; else uv sync --no-dev; fi
+RUN cd apps/worker && if [ -n "$WORKER_EXTRAS" ]; then uv sync --frozen --no-dev $WORKER_EXTRAS || uv sync --frozen --no-dev; else uv sync --frozen --no-dev; fi
 
 COPY apps/worker/src/ apps/worker/src/
 

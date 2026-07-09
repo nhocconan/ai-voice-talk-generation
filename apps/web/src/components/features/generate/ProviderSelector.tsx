@@ -29,7 +29,11 @@ export function ProviderSelector({
     (value ? providers?.find((provider) => provider.id === value) : providers?.find((provider) => provider.isDefault)) ??
     providers?.[0]
   const selectedMeta = selectedProvider ? getProviderMeta(selectedProvider.name, locale) : null
-  const isApproximateLocalClone = selectedProvider?.name === "VIENEU_TTS" || selectedProvider?.name === "VOXCPM2"
+  const isApproximateLocalClone =
+    selectedProvider?.name === "VIENEU_TTS" ||
+    selectedProvider?.name === "VOXCPM2" ||
+    selectedProvider?.name === "F5_TTS"
+  const displayName = selectedMeta?.name ?? selectedProvider?.name ?? "—"
 
   return (
     <div className="space-y-2">
@@ -37,7 +41,7 @@ export function ProviderSelector({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-0)] px-3 py-2 text-body-ui"
+        className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-0)] px-3 py-2 text-body-ui cursor-pointer"
       >
         <option value="">{t("useDefaultProvider")}</option>
         {providers?.map((provider) => {
@@ -46,13 +50,22 @@ export function ProviderSelector({
             <option key={provider.id} value={provider.id}>
               {meta?.shortName ?? provider.name}
               {provider.isDefault ? " (default)" : ""}
+              {meta?.supports.voiceCloning === false ? " · no clone" : ""}
             </option>
           )
         })}
       </select>
+      <p className="text-micro text-[var(--color-text-primary)] font-medium">
+        {t("activeProviderLabel", { name: displayName })}
+      </p>
       <p className="text-micro text-[var(--color-text-muted)]">{description}</p>
       {selectedMeta ? (
         <p className="text-micro text-[var(--color-text-muted)]">{selectedMeta.tagline}</p>
+      ) : null}
+      {selectedProvider?.name === "VIENEU_TTS" ? (
+        <p className="rounded-[var(--radius-md)] border border-amber-300 bg-amber-50 px-3 py-2 text-micro text-amber-900 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200">
+          {t("vieneuScreeningNote")}
+        </p>
       ) : null}
       {isApproximateLocalClone ? (
         <p className="rounded-[var(--radius-md)] border border-amber-300 bg-amber-50 px-3 py-2 text-micro text-amber-900 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200">

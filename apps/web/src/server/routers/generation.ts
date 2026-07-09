@@ -63,6 +63,21 @@ export const generationRouter = router({
   // Enabled LLM providers (with their enabled LLM models) for the draft-script
   // model picker. Only providers that have at least one enabled LLM model appear.
   listLlmProviders: protectedProcedure.query(async ({ ctx }) => {
+    // Self-heal: enabled LLM providers with an empty catalog get curated models
+    // so enabling Ollama/Gemini LLM is enough for "Draft with AI".
+    const { ensureCuratedModels } = await import("@/server/services/provider-models")
+    const enabledLlms = await ctx.db.providerConfig.findMany({
+      where: { enabled: true, name: { in: LLM_PROVIDER_NAMES } },
+      select: { id: true, name: true, config: true },
+    })
+    for (const p of enabledLlms) {
+      const cfg =
+        p.config && typeof p.config === "object" && !Array.isArray(p.config)
+          ? (p.config as Record<string, unknown>)
+          : {}
+      await ensureCuratedModels(ctx.db, p.id, p.name, cfg)
+    }
+
     return ctx.db.providerConfig.findMany({
       where: {
         enabled: true,
@@ -132,6 +147,8 @@ export const generationRouter = router({
       xaiVoiceId: z.string().trim().max(200).optional(),
       audiogram: z.boolean().default(false),
       audiogramTitle: z.string().max(120).optional(),
+      audiogramAspect: z.enum(["1:1", "9:16", "16:9"]).default("1:1"),
+      audiogramTheme: z.enum(["dark", "midnight", "forest", "sunset", "brand", "slate"]).default("dark"),
     }))
     .mutation(async ({ ctx, input }) => {
       await enforceRenderRateLimit(ctx.session.user.id)
@@ -164,7 +181,14 @@ export const generationRouter = router({
         providerId,
         kind: "PRESENTATION",
         speakers: [{ label: "A", profileId: input.profileId, segments: [], script: input.script, xaiVoiceId: input.xaiVoiceId }],
-        output: { mp3: true, wav: true, chapters: false, audiogram: input.audiogram },
+        output: {
+          mp3: true,
+          wav: true,
+          chapters: false,
+          audiogram: input.audiogram,
+          audiogramAspect: input.audiogramAspect,
+          audiogramTheme: input.audiogramTheme,
+        },
         pacingLock: false,
         ...(input.audiogramTitle ? { audiogramTitle: input.audiogramTitle } : {}),
       })
@@ -182,6 +206,8 @@ export const generationRouter = router({
       providerId: z.string().optional(),
       audiogram: z.boolean().default(false),
       audiogramTitle: z.string().max(120).optional(),
+      audiogramAspect: z.enum(["1:1", "9:16", "16:9"]).default("1:1"),
+      audiogramTheme: z.enum(["dark", "midnight", "forest", "sunset", "brand", "slate"]).default("dark"),
     }))
     .mutation(async ({ ctx, input }) => {
       await enforceRenderRateLimit(ctx.session.user.id)
@@ -223,7 +249,14 @@ export const generationRouter = router({
         providerId,
         kind: "PODCAST",
         speakers: input.speakers,
-        output: { mp3: true, wav: true, chapters: true, audiogram: input.audiogram },
+        output: {
+          mp3: true,
+          wav: true,
+          chapters: true,
+          audiogram: input.audiogram,
+          audiogramAspect: input.audiogramAspect,
+          audiogramTheme: input.audiogramTheme,
+        },
         pacingLock: input.pacingLock,
         ...(input.audiogramTitle ? { audiogramTitle: input.audiogramTitle } : {}),
       })
@@ -254,6 +287,7 @@ export const generationRouter = router({
       providerId: z.string().optional(),
       audiogram: z.boolean().default(false),
       audiogramTitle: z.string().max(120).optional(),
+      audiogramAspect: z.enum(["1:1", "9:16", "16:9"]).default("1:1"),
     }))
     .mutation(async ({ ctx, input }) => {
       await enforceRenderRateLimit(ctx.session.user.id)
@@ -286,7 +320,7 @@ export const generationRouter = router({
         providerId,
         kind: "REVOICE",
         speakers: input.speakers,
-        output: { mp3: true, wav: true, chapters: true, audiogram: input.audiogram },
+        output: { mp3: true, wav: true, chapters: true, audiogram: input.audiogram, audiogramAspect: input.audiogramAspect },
         pacingLock: input.pacingLock,
         ...(input.audiogramTitle ? { audiogramTitle: input.audiogramTitle } : {}),
       })
@@ -500,10 +534,55 @@ export const generationRouter = router({
       }
     }),
 
-  // Admin delete
+  // User delete (own rows). Permanently removes DB row + MinIO audio/video assets.
+  delete: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const gen = await ctx.db.generation.findUnique({ where: { id: input.id } })
+      if (!gen) throw new TRPCError({ code: "NOT_FOUND", message: "Generation not found" })
+      const role = ctx.session.user.role as string
+      const isAdmin = role === "ADMIN" || role === "SUPER_ADMIN"
+      if (!isAdmin && gen.userId !== ctx.session.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN" })
+      }
+
+      const { deleteGenerationAssets } = await import("@/server/services/storage")
+      await deleteGenerationAssets({
+        outputMp3Key: gen.outputMp3Key,
+        outputWavKey: gen.outputWavKey,
+        outputVideoKey: gen.outputVideoKey,
+        sourceAudioKey: gen.sourceAudioKey,
+        sourceVideoKey: gen.sourceVideoKey,
+      })
+
+      await ctx.db.generation.delete({ where: { id: input.id } })
+      await ctx.audit({
+        actorId: ctx.session.user.id,
+        action: "generation.delete",
+        targetType: "Generation",
+        targetId: input.id,
+        meta: {
+          hadVideo: Boolean(gen.outputVideoKey),
+          hadAudio: Boolean(gen.outputMp3Key ?? gen.outputWavKey),
+        },
+      })
+      return { ok: true as const, hadVideo: Boolean(gen.outputVideoKey) }
+    }),
+
+  // Admin delete — same purge as user delete
   adminDelete: adminProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      const gen = await ctx.db.generation.findUnique({ where: { id: input.id } })
+      if (!gen) throw new TRPCError({ code: "NOT_FOUND", message: "Generation not found" })
+      const { deleteGenerationAssets } = await import("@/server/services/storage")
+      await deleteGenerationAssets({
+        outputMp3Key: gen.outputMp3Key,
+        outputWavKey: gen.outputWavKey,
+        outputVideoKey: gen.outputVideoKey,
+        sourceAudioKey: gen.sourceAudioKey,
+        sourceVideoKey: gen.sourceVideoKey,
+      })
       await ctx.db.generation.delete({ where: { id: input.id } })
       await ctx.audit({ actorId: ctx.session.user.id, action: "generation.delete", targetType: "Generation", targetId: input.id })
     }),
@@ -745,9 +824,18 @@ export async function draftScriptText(
     educational: "educational and informative",
     storytelling: "engaging and narrative",
   }
+  // Keep the user turn short and imperative. System-side "speechwriter" rules
+  // live in llm.ts (DRAFT_SYSTEM). Avoid asking the model to "plan" length —
+  // thinking models will dump word-count CoT into the reply.
   const prompt = input.lang === "vi"
-    ? `Viết một kịch bản thuyết trình bằng tiếng Việt về chủ đề: "${input.topic}". Giọng điệu ${toneMap[input.tone]}. Độ dài khoảng ${wordCount} từ (tương đương ${input.minutes} phút khi đọc). Chỉ trả về văn bản kịch bản, không có tiêu đề hay chú thích.`
-    : `Write a presentation script in English on the topic: "${input.topic}". Tone: ${toneMap[input.tone]}. Length: approximately ${wordCount} words (equivalent to ${input.minutes} minutes when read aloud). Return only the script text, no headings or annotations.`
+    ? `Viết kịch bản thuyết trình tiếng Việt (đọc to được ngay) về: "${input.topic}".
+Giọng điệu: ${toneMap[input.tone]}.
+Độ dài mục tiêu: khoảng ${wordCount} từ (~${input.minutes} phút).
+Chỉ xuất bản thân kịch bản nói. Cấm phân tích, đếm từ, nháp, tiêu đề, markdown.`
+    : `Write a speak-aloud presentation script in English on: "${input.topic}".
+Tone: ${toneMap[input.tone]}.
+Target length: about ${wordCount} words (~${input.minutes} minutes).
+Output only the spoken script. No analysis, word counts, drafts, titles, or markdown.`
 
   const llm = await resolveLlmProvider(prisma, input.providerId, input.model)
   if (llm) {
@@ -793,13 +881,23 @@ export async function draftScriptText(
 
 export async function resolveProvider(ctx: { db: typeof db }, providerId: string | undefined): Promise<string> {
   if (providerId) {
-    const p = await ctx.db.providerConfig.findFirst({ where: { id: providerId, enabled: true } })
-    if (!p) throw new TRPCError({ code: "BAD_REQUEST", message: "Provider not available" })
+    const p = await ctx.db.providerConfig.findFirst({
+      where: { id: providerId, enabled: true, name: { notIn: LLM_PROVIDER_NAMES } },
+    })
+    if (!p) throw new TRPCError({ code: "BAD_REQUEST", message: "TTS provider not available" })
     return p.id
   }
-  const defaultP = await ctx.db.providerConfig.findFirst({ where: { isDefault: true, enabled: true } })
-  if (!defaultP) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "No default provider configured" })
-  return defaultP.id
+  // Default must be a TTS provider — LLM defaults (Ollama, Gemini LLM, …) never drive audio.
+  const defaultP = await ctx.db.providerConfig.findFirst({
+    where: { isDefault: true, enabled: true, name: { notIn: LLM_PROVIDER_NAMES } },
+  })
+  if (defaultP) return defaultP.id
+  const anyTts = await ctx.db.providerConfig.findFirst({
+    where: { enabled: true, name: { notIn: LLM_PROVIDER_NAMES } },
+    orderBy: { name: "asc" },
+  })
+  if (!anyTts) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "No default TTS provider configured" })
+  return anyTts.id
 }
 
 function formatMs(ms: number): string {

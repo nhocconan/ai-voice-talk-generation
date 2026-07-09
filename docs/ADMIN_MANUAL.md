@@ -146,6 +146,17 @@ For `ElevenLabs`, `Gemini TTS`, `Xiaomi MiMo TTS`, and `xAI Grok TTS`:
 - Voice cloning: when a profile has a reference clip, the worker base64-encodes the sample and sends it inline as the `voice` parameter on the `mimo-v2.5-tts-voiceclone` model. There is no separate enroll step — Xiaomi treats the reference clip as the voice handle on every request. The 10 MB total payload limit applies to the encoded sample.
 - The optional `Default Style Prompt` field is sent as the `user` message (natural-language style guidance, e.g. "warm professional narrator, slightly fast"). Leave blank to skip.
 
+#### 2.5.1a MiniMax Speech
+
+- Get an API key from the MiniMax developer console (see MiniMax's own site for the current URL — not reproduced here to avoid linking a stale address).
+- Paste the key into the `MiniMax Speech` card in `/admin/providers` (or set `MINIMAX_API_KEY` in `.env` as a fallback — keys normally live encrypted in the DB via Admin → Providers) and click `Test`.
+- Voice cloning: the worker hashes the reference clip (SHA-1) into a deterministic `voice_id`, uploads it via `files/upload` (`purpose=voice_clone`), then calls `voice_clone`. Re-rendering the same profile reuses the same `voice_id` instead of re-paying the clone fee. A "duplicate id" error from MiniMax is treated as "clone already exists," not a failure.
+- **Clone fee:** MiniMax charges a one-time fee per cloned voice on first use — ~$1.5/voice per the pricing recorded in §2.1 above; confirm the current rate on MiniMax's pricing page before relying on it for budgeting.
+- **7-day unused-clone deletion:** MiniMax deletes a cloned voice that goes unused for 7 days. Because the worker derives `voice_id` from the reference-clip hash, the next render simply re-clones under the same ID — no operator action needed, but expect a clone-fee charge again if a profile goes cold for over a week.
+- **Model choice:** the config default is `speech-2.8-hd`. Per MiniMax's current docs the `speech-2.6-*` family is deprecated and 2.8 is a drop-in replacement with an identical parameter interface. Deployments seeded before 2026-07-09 still have `speech-2.6-hd` in their `provider_configs` row — switch the card's `model` field to `speech-2.8-hd` and press `Test` before the 2.6 family is retired.
+- Source audio constraints: mp3/m4a/wav, 10s–5min duration, ≤20MB.
+- **Not live-tested in this environment** — no `MINIMAX_API_KEY` is configured on this deployment; an operator must paste a key into `/admin/providers` and use the card's `Test` action to confirm connectivity before enabling.
+
 #### 2.5.2 xAI Grok TTS
 
 - Console: https://console.x.ai
@@ -188,8 +199,8 @@ Path: **`/admin/generations`**
 
 - Filter by user, status, and time range.
 - Open a row to inspect provider, duration, error, and output artifacts.
-- **Retry** — re-queues a failed job with the same inputs.
 - **Cancel** — stops a queued or running job.
+- There is no re-queue/retry action. A failed generation must be resubmitted from the generate page.
 
 Health red flags:
 
@@ -198,6 +209,16 @@ Health red flags:
 | Many `FAILED` jobs with provider errors | Provider runtime missing, API key expired, or provider config wrong |
 | Jobs stuck in `QUEUED` | Worker is down or cannot reach Redis |
 | Very long render times | Mac host is overloaded, or an experimental provider was set default too early |
+
+### 5.1 Rendering social video (audiogram)
+
+Audio files are rejected by most social platforms, so any generation can also emit an MP4.
+
+- **Where users turn it on:** the *Video (audiogram)* section on `/generate` (presentation) and `/generate/podcast`. It is off by default. When enabled, the user can set an optional title and pick an aspect ratio: `1:1` (Instagram/Facebook), `9:16` (TikTok/Reels/Shorts), or `16:9` (YouTube).
+- **What gets produced:** an H.264/AAC MP4 at `renders/<generationId>/audiogram.mp4` in MinIO, recorded on the generation row as `outputVideoKey`. It contains an animated dark gradient background, a live cyan waveform, a bottom progress bar, and burned captions.
+- **Where it appears:** the generation history list (inline preview + *Download video*) and, if the generation is shared, the public share page.
+- **Aspect ratio and title are per-render.** Only the `audiogram` boolean is stored on the generation row; the aspect ratio and title live in the render job payload and are gone once the job finishes. Re-rendering the same audio into a different aspect ratio means submitting a new generation.
+- **Captions need libass.** The production worker image (`infra/docker/worker.Dockerfile`, Debian `ffmpeg`) includes it. An ffmpeg built without libass — notably the default Homebrew formula on macOS — renders the video *without* captions and logs `Captions skipped: this ffmpeg build lacks libass`. The video still succeeds, so this failure is silent to the user: grep the worker log for that warning if captions go missing.
 
 ## 6. System Health triage
 
@@ -262,12 +283,16 @@ Restore flow:
 | Xiaomi MiMo "Invalid API Key" | Wrong base URL for the key tier. `tp-…` keys must hit `token-plan-sgp.xiaomimimo.com`; `sk-…` keys hit `api.xiaomimimo.com`. The provider auto-routes — only the Base URL field overrides this. |
 | xAI custom-voice 403 | Endpoint is gated to Enterprise teams. Use a built-in voice (`eve` etc.) or contact xAI to enable `/custom-voices`. |
 | New providers missing in /admin/providers after upgrade | `pnpm db:migrate && pnpm db:seed` (or in Docker: `docker compose exec web pnpm db:migrate` then run the seed). The seed is idempotent — safe to re-run. |
+| Audiogram MP4 has no captions | The worker's ffmpeg lacks libass. Check the worker log for `Captions skipped`. Use the Docker worker image, or on macOS `brew install ffmpeg`. |
+| Audiogram waveform invisible | The `showwaves` filter must run with `draw=full`; the ffmpeg default `draw=scale` makes the wave nearly transparent on the dark background. Covered by `tests/unit/test_audiogram.py::test_render_audiogram_waveform_is_actually_visible`. |
+| MiniMax renders fail after working for months | `speech-2.6-*` is deprecated. Switch the provider's `model` to `speech-2.8-hd` in `/admin/providers` and press `Test`. |
 
 ## 11. Escalation
 
 Critical incidents such as data loss or active abuse go to the on-call. Provider billing issues stay with the provider; this system does not proxy billing.
 
 ## Changelog
+- 2026-07-09: Added the MiniMax Speech provider runbook (§2.5.1a) and the audiogram social-video operator section (§5.1). MiniMax config default moved to `speech-2.8-hd` for new installs — existing rows keep `speech-2.6-hd` until an operator switches them. New env var: `MINIMAX_API_KEY` (fallback only). Working tree, pending commit.
 - 2026-05-03: Added Xiaomi MiMo TTS (built-in voices + audio-sample voice cloning, auto-routed by `sk-…` / `tp-…` key prefix) and xAI Grok TTS (built-in voices + `/custom-voices` cloning on Enterprise) to `/admin/providers`. New env vars: `XIAOMI_API_KEY`, `XAI_API_KEY`. Run `pnpm db:migrate && pnpm db:seed` after pulling.
 - 2026-05-03: Removed ClamAV malware scanner (was fail-open in dev and not enabled in prod). Dropped `CLAMAV_HOST`, `CLAMAV_PORT`, `HOST_CLAMAV_PORT` env vars and the `clamav` docker service. Reclaim disk by deleting `infra/volumes/clamav` and pruning the `clamav/clamav` image (`docker rmi clamav/clamav:stable`).
 - 2026-04-20: Updated the runbook for VieNeu-TTS and VoxCPM2, including provider links and the exact `/admin/providers` configuration flow.

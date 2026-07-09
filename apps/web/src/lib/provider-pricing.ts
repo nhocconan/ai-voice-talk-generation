@@ -25,7 +25,8 @@ const RATES: Record<string, ProviderRate> = {
   VIBEVOICE: { costPerMinuteUsd: 0, isLocal: true },
   // Cloud
   XAI_TTS: { costPerMinuteUsd: 0.003, isLocal: false },
-  // MiniMax speech-2.6-hd $100/1M chars (+$1.5 one-time clone fee, not included)
+  // Based on MiniMax's published HD rate of $100/1M chars (+$1.5 one-time clone
+  // fee, not included). Not re-verified against speech-2.8-hd list pricing.
   MINIMAX_TTS: { costPerMinuteUsd: 0.08, isLocal: false },
   GEMINI_TTS: { costPerMinuteUsd: 0.004, isLocal: false },
   XIAOMI_TTS: { costPerMinuteUsd: 0.006, isLocal: false },

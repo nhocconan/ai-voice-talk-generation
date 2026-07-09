@@ -241,9 +241,15 @@ export const systemRouter = router({
           }
         }
 
+        case "XTTS_V2":
+          return {
+            ok: false,
+            message:
+              "XTTS-v2 support was dropped (stock Coqui model has no Vietnamese). Use MiniMax / xAI / ElevenLabs or VieNeu / VoxCPM2.",
+          }
+
         case "VIENEU_TTS":
         case "VOXCPM2":
-        case "XTTS_V2":
         case "F5_TTS":
         case "VIBEVOICE": {
           // Ask worker to synthesize a 2-word test sample

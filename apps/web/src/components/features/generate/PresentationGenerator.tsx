@@ -20,8 +20,21 @@ const schema = z.object({
   estimatedMinutes: z.coerce.number().min(0.1).max(60),
   providerId: z.string().optional(),
   xaiVoiceId: z.string().trim().max(200).optional(),
+  audiogram: z.boolean(),
+  audiogramTitle: z.string().trim().max(120).optional(),
+  audiogramAspect: z.enum(["1:1", "9:16", "16:9"]),
+  audiogramTheme: z.enum(["dark", "midnight", "forest", "sunset", "brand", "slate"]),
 })
 type FormData = z.infer<typeof schema>
+
+const AUDIOGRAM_THEMES = [
+  { id: "dark" as const, swatch: "#0B0B0F", accent: "#7FFFFF" },
+  { id: "midnight" as const, swatch: "#0A1628", accent: "#60A5FA" },
+  { id: "forest" as const, swatch: "#0C1F17", accent: "#4ADE80" },
+  { id: "sunset" as const, swatch: "#1A0F14", accent: "#FB923C" },
+  { id: "brand" as const, swatch: "#1A0508", accent: "#E5001A" },
+  { id: "slate" as const, swatch: "#111827", accent: "#A78BFA" },
+]
 
 const draftSchema = z.object({
   topic: z.string().min(3, "Topic too short"),
@@ -68,7 +81,15 @@ export function PresentationGenerator() {
 
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { estimatedMinutes: 5, providerId: "", xaiVoiceId: "" },
+    defaultValues: {
+      estimatedMinutes: 5,
+      providerId: "",
+      xaiVoiceId: "",
+      audiogram: false,
+      audiogramTitle: "",
+      audiogramAspect: "1:1",
+      audiogramTheme: "dark",
+    },
   })
 
   const draftForm = useForm<DraftForm>({
@@ -79,14 +100,31 @@ export function PresentationGenerator() {
   const profileId = watch("profileId")
   const providerId = watch("providerId")
   const estimatedMinutes = watch("estimatedMinutes")
+  const audiogram = watch("audiogram")
+  const audiogramTheme = watch("audiogramTheme")
   const selectedTtsProvider =
     (providerId ? ttsProviders?.find((provider) => provider.id === providerId) : ttsProviders?.find((provider) => provider.isDefault)) ??
     ttsProviders?.[0]
-  const requiresXaiVoiceId = selectedTtsProvider?.name === "XAI_TTS"
+  const showVoiceIdOverride = selectedTtsProvider?.name === "XAI_TTS" || selectedTtsProvider?.name === "MINIMAX_TTS"
 
   const onSubmit = async (data: FormData) => {
-    const { generationId: id } = await create.mutateAsync(data)
-    setGenerationId(id)
+    try {
+      const { generationId: id } = await create.mutateAsync({
+        ...data,
+        // Empty string from the select must not override the server default.
+        providerId: data.providerId || undefined,
+        xaiVoiceId: data.xaiVoiceId?.trim() || undefined,
+      })
+      setGenerationId(id)
+    } catch {
+      // Error is surfaced via create.error below — do not swallow silently.
+    }
+  }
+
+  const onInvalid = () => {
+    // Scroll first field error into view so "nothing happens" is never silent.
+    const first = document.querySelector<HTMLElement>("[aria-invalid=true], .text-\\[var\\(--color-danger\\)\\]")
+    first?.scrollIntoView({ behavior: "smooth", block: "center" })
   }
 
   const onDraft = async (data: DraftForm) => {
@@ -109,7 +147,7 @@ export function PresentationGenerator() {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6">
       <div
         className="bg-[var(--color-surface-0)] rounded-[var(--radius-card)] p-6"
         style={{ boxShadow: "var(--shadow-outline-ring), var(--shadow-soft-lift)" }}
@@ -146,10 +184,10 @@ export function PresentationGenerator() {
             description={t("providerCompareHint")}
           />
 
-          {requiresXaiVoiceId && (
+          {showVoiceIdOverride && (
             <div>
               <label htmlFor="xaiVoiceId" className="block text-caption mb-2">
-                {t("xaiVoiceIdOverride")}
+                {t("voiceIdOverride")}
               </label>
               <input
                 id="xaiVoiceId"
@@ -157,9 +195,82 @@ export function PresentationGenerator() {
                 placeholder="voice_..."
                 className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui font-mono"
               />
-              <p className="text-micro text-[var(--color-text-muted)] mt-1">{t("xaiVoiceIdOverrideHint")}</p>
+              <p className="text-micro text-[var(--color-text-muted)] mt-1">{t("voiceIdOverrideHint")}</p>
             </div>
           )}
+
+          <div>
+            <p className="text-caption mb-2">{t("audiogramSection")}</p>
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <input type="checkbox" {...register("audiogram")} className="h-4 w-4 rounded border-[var(--color-border)] text-[var(--color-accent)]" />
+              <span className="text-body-ui">{t("audiogramToggle")}</span>
+            </label>
+            <p className="text-micro text-[var(--color-text-muted)] mt-1">{t("audiogramHint")}</p>
+
+            {audiogram && (
+              <div className="mt-3 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="audiogramTitle" className="block text-micro text-[var(--color-text-muted)] mb-1">
+                      {t("audiogramTitle")}
+                    </label>
+                    <input
+                      id="audiogramTitle"
+                      {...register("audiogramTitle")}
+                      maxLength={120}
+                      className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="audiogramAspect" className="block text-micro text-[var(--color-text-muted)] mb-1">
+                      {t("audiogramAspect")}
+                    </label>
+                    <select
+                      id="audiogramAspect"
+                      {...register("audiogramAspect")}
+                      className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui bg-[var(--color-surface-0)] cursor-pointer"
+                    >
+                      <option value="1:1">{t("audiogramAspectSquare")}</option>
+                      <option value="9:16">{t("audiogramAspectVertical")}</option>
+                      <option value="16:9">{t("audiogramAspectWide")}</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <p className="block text-micro text-[var(--color-text-muted)] mb-2">{t("audiogramTheme")}</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {AUDIOGRAM_THEMES.map((theme) => {
+                      const selected = audiogramTheme === theme.id
+                      return (
+                        <button
+                          key={theme.id}
+                          type="button"
+                          onClick={() => setValue("audiogramTheme", theme.id)}
+                          className={`flex items-center gap-2 rounded-[var(--radius-md)] border px-3 py-2 text-left text-sm cursor-pointer transition-colors ${
+                            selected
+                              ? "border-[var(--color-emphasis)] bg-[var(--color-surface-1)]"
+                              : "border-[var(--color-border)] hover:bg-[var(--color-surface-1)]"
+                          }`}
+                        >
+                          <span
+                            className="h-8 w-8 shrink-0 rounded-md border border-white/10"
+                            style={{
+                              background: `linear-gradient(135deg, ${theme.swatch} 55%, ${theme.accent} 100%)`,
+                            }}
+                            aria-hidden
+                          />
+                          <span className="text-body-ui text-[var(--color-text-primary)]">
+                            {t(`audiogramTheme_${theme.id}`)}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-micro text-[var(--color-text-muted)] mt-2">{t("audiogramCaptionsHint")}</p>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -167,7 +278,7 @@ export function PresentationGenerator() {
               <button
                 type="button"
                 onClick={() => setShowDraft(!showDraft)}
-                className="flex items-center gap-1.5 text-caption text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+                className="flex items-center gap-1.5 text-caption text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] cursor-pointer transition-colors"
               >
                 <SparklesIcon size={12} />
                 {t("draftWithAi")}
@@ -234,7 +345,7 @@ export function PresentationGenerator() {
                   type="button"
                   onClick={draftForm.handleSubmit(onDraft)}
                   disabled={draftMutation.isPending}
-                  className="h-8 px-4 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button text-sm disabled:opacity-50 hover:opacity-90"
+                  className="h-8 px-4 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer hover:opacity-90"
                 >
                   {draftMutation.isPending ? t("drafting") : `${t("generateDraft")} →`}
                 </button>
@@ -261,11 +372,17 @@ export function PresentationGenerator() {
         <p className="text-body-ui text-[var(--color-danger)]">{create.error.message}</p>
       )}
 
+      {(errors.profileId || errors.script) && (
+        <p className="text-body-ui text-[var(--color-danger)]" role="alert">
+          {errors.profileId?.message ?? errors.script?.message}
+        </p>
+      )}
+
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <button
           type="submit"
-          disabled={create.isPending}
-          className="h-10 px-6 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button disabled:opacity-50 hover:opacity-90"
+          disabled={create.isPending || draftMutation.isPending}
+          className="h-10 px-6 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer hover:opacity-90"
         >
           {create.isPending ? t("queueing") : t("generateAudio")}
         </button>

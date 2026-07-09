@@ -70,7 +70,7 @@ class MiniMaxProvider:
         return {"Authorization": f"Bearer {self._api_key}"}
 
     def _model(self) -> str:
-        return str(self._config.get("model", "speech-2.6-hd"))
+        return str(self._config.get("model", "speech-2.8-hd"))
 
     def _default_voice(self) -> str:
         return str(self._config.get("voice", "Wise_Woman"))

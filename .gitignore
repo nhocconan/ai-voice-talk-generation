@@ -67,3 +67,4 @@ logs/
 
 # Hosting
 apps/web/.vercel/
+.logs

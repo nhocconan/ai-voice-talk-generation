@@ -34,9 +34,10 @@ export default async function SharePage({ params }: Props) {
   }
   if (gen.status !== GenStatus.DONE) return notFound()
 
-  const [mp3Url, wavUrl] = await Promise.all([
+  const [mp3Url, wavUrl, videoUrl] = await Promise.all([
     gen.outputMp3Key ? generatePresignedGetUrl(gen.outputMp3Key, 3600) : null,
     gen.outputWavKey ? generatePresignedGetUrl(gen.outputWavKey, 3600) : null,
+    gen.outputVideoKey ? generatePresignedGetUrl(gen.outputVideoKey, 3600) : null,
   ])
 
   const kindLabel =
@@ -57,6 +58,13 @@ export default async function SharePage({ params }: Props) {
           )}
         </div>
 
+        {videoUrl && (
+          <div className="space-y-2">
+            <p className="text-caption text-[var(--color-text-secondary)]">{t("videoPreview")}</p>
+            <video controls className="w-full rounded-[var(--radius-md)]" src={videoUrl} />
+          </div>
+        )}
+
         {mp3Url && (
           <div className="space-y-2">
             <p className="text-caption text-[var(--color-text-secondary)]">{t("preview")}</p>
@@ -65,6 +73,15 @@ export default async function SharePage({ params }: Props) {
         )}
 
         <div className="flex flex-col gap-3">
+          {videoUrl && (
+            <a
+              href={videoUrl}
+              download
+              className="flex items-center justify-center h-10 px-6 rounded-[var(--radius-pill)] border border-[var(--color-border)] text-button hover:bg-[var(--color-surface-2)] transition-colors"
+            >
+              {t("downloadVideo")}
+            </a>
+          )}
           {mp3Url && (
             <a
               href={mp3Url}

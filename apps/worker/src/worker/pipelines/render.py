@@ -126,31 +126,51 @@ async def run_render(
             wav_key = f"renders/{generation_id}/output.wav"
             await asyncio.to_thread(upload_object, wav_24bit_path, wav_key, "audio/wav")
 
-        # Audiogram (Mode A) — square MP4 with waveform + chapter captions.
+        duration_ms = await get_duration_ms(output_wav)
+
+        # Audiogram (Mode A) — social-ready MP4 with waveform + captions.
         video_key: str | None = None
         if output.get("audiogram"):
-            from ..audio.audiogram import render_audiogram
+            from ..audio.audiogram import resolve_theme, render_audiogram
 
             await progress_fn(generation_id, 0.93, "Rendering audiogram")
+            # Podcasts: chapter titles. Presentations: chapters is empty — build
+            # timed caption lines from the speaker script so text overlay always
+            # has content even when word-alignment fails.
             audiogram_segments = [
                 {"start_ms": c["start_ms"], "end_ms": c["end_ms"], "text": c["title"]}
                 for c in chapters
             ]
+            if not audiogram_segments:
+                script_parts: list[str] = []
+                for spk in speakers:
+                    if spk.get("script"):
+                        script_parts.append(str(spk["script"]))
+                    for seg in spk.get("segments") or []:
+                        if isinstance(seg, dict) and seg.get("text"):
+                            script_parts.append(str(seg["text"]))
+                audiogram_segments = _caption_segments_from_script(
+                    "\n".join(script_parts),
+                    duration_ms,
+                )
             audiogram_path = tmp_dir / "audiogram.mp4"
             audiogram_lang = speakers[0].get("lang", "vi") if speakers else "vi"
+            theme = resolve_theme(str(output.get("audiogram_theme") or output.get("audiogramTheme") or "dark"))
             await render_audiogram(
                 audio_path=output_wav,
                 out_path=audiogram_path,
                 segments=audiogram_segments,
                 title=audiogram_title,
+                aspect=output.get("audiogram_aspect") or output.get("audiogramAspect") or "1:1",
+                duration_ms=duration_ms,
+                background_hex=theme["bg"],
+                wave_hex=theme["wave"],
                 word_captions=settings.audiogram_word_captions,
                 caption_preset=settings.caption_preset,
                 lang=audiogram_lang,
             )
             video_key = f"renders/{generation_id}/audiogram.mp4"
             await asyncio.to_thread(upload_object, audiogram_path, video_key, "video/mp4")
-
-        duration_ms = await get_duration_ms(output_wav)
 
     await progress_fn(generation_id, 1.0, "Done")
     await result_fn(
@@ -277,6 +297,51 @@ def _chunk_text(text: str, max_chars: int, lang: str = "vi") -> list[str]:
     if current:
         chunks.append(current)
     return [c for c in chunks if c.strip()]
+
+
+def _caption_segments_from_script(script: str, duration_ms: int) -> list[dict]:
+    """Split a presentation script into timed caption lines by character weight.
+
+    Used when there are no podcast chapters — otherwise presentation audiograms
+    burned only a title (or nothing) and looked "caption-less".
+    """
+    raw = (script or "").strip()
+    if not raw or duration_ms <= 0:
+        return []
+    # Prefer sentence boundaries; fall back to line breaks / coarse chunks.
+    parts = [p.strip() for p in re.split(r"(?<=[.!?…。！？])\s+|\n+", raw) if p.strip()]
+    if not parts:
+        parts = [raw]
+    # Cap line length for mobile readability.
+    lines: list[str] = []
+    for part in parts:
+        if len(part) <= 90:
+            lines.append(part)
+            continue
+        words = part.split()
+        buf: list[str] = []
+        for w in words:
+            trial = (" ".join(buf + [w])).strip()
+            if buf and len(trial) > 80:
+                lines.append(" ".join(buf))
+                buf = [w]
+            else:
+                buf.append(w)
+        if buf:
+            lines.append(" ".join(buf))
+    weights = [max(len(line), 1) for line in lines]
+    total_w = sum(weights) or 1
+    cursor = 0
+    segs: list[dict] = []
+    for i, (line, w) in enumerate(zip(lines, weights)):
+        if i == len(lines) - 1:
+            end = duration_ms
+        else:
+            end = min(duration_ms, cursor + int(duration_ms * (w / total_w)))
+            end = max(end, cursor + 800)
+        segs.append({"start_ms": cursor, "end_ms": end, "text": line})
+        cursor = end
+    return segs
 
 
 def _get_wav_duration_ms(path: Path) -> int:
