@@ -56,6 +56,7 @@ Each provider card has:
 
 | Need | Recommended provider | Why |
 |---|---|---|
+| Vietnamese cloud cloning, pay-as-you-go | MiniMax Speech | ~$1.5 one-time clone + ~$2–3 per 30-min HD render, no subscription — recommended default since July 2026 |
 | Local-first on Mac | VieNeu-TTS | Best current fit for Vietnamese cloning on Apple Silicon |
 | Higher-quality comparison lane | VoxCPM2 | Stronger long-term fidelity path, especially on CUDA |
 | Compatibility fallback | XTTS-v2 or F5-TTS | Keep available when local experiments fail |

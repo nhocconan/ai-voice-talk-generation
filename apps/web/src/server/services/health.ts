@@ -3,6 +3,7 @@
  * Used by /admin/system-health and gates for each feature.
  */
 import { S3Client, ListBucketsCommand } from "@aws-sdk/client-s3"
+import { ProviderName } from "@prisma/client"
 import Redis from "ioredis"
 import { db } from "@/server/db/client"
 import { env } from "@/env"
@@ -208,21 +209,46 @@ async function probeTTSProviders(): Promise<ServiceHealth[]> {
   }]
 }
 
+// Any enabled LLM provider (Gemini/Grok/Groq/xAI/Ollama) with an enabled LLM
+// model — this is exactly what resolveLlm needs for script drafting to work.
+async function probeLlmProviders(): Promise<ServiceHealth> {
+  const LLM_NAMES: ProviderName[] = [
+    ProviderName.GEMINI_LLM,
+    ProviderName.GROQ,
+    ProviderName.XAI_LLM,
+    ProviderName.GROK_OAUTH,
+    ProviderName.OLLAMA,
+  ]
+  const ready = await db.providerConfig.count({
+    where: { enabled: true, name: { in: LLM_NAMES }, models: { some: { kind: "LLM", enabled: true } } },
+  })
+  return {
+    id: "llm-providers",
+    label: "LLM providers (script drafting)",
+    status: ready > 0 ? "up" : "disabled",
+    required: false,
+    detail: `${ready} ready`,
+    supports: ["script drafting"],
+    setupHint: ready === 0 ? "Enable an LLM provider (Gemini / Grok / Groq) at /admin/providers." : undefined,
+  }
+}
+
 export async function runHealthCheck(): Promise<{
   services: ServiceHealth[]
   summary: { ok: number; degraded: number; down: number; disabled: number }
 }> {
-  const [pg, redis, minio, worker, resend, gemini, providers] = await Promise.all([
+  const [pg, redis, minio, worker, resend, gemini, llm, providers] = await Promise.all([
     probePostgres().catch((e: unknown): ServiceHealth => ({ id: "postgres", label: "PostgreSQL", status: "down", required: true, supports: [], detail: String(e) })),
     probeRedis().catch((e: unknown): ServiceHealth => ({ id: "redis", label: "Redis", status: "down", required: true, supports: [], detail: String(e) })),
     probeMinio().catch((e: unknown): ServiceHealth => ({ id: "minio", label: "MinIO", status: "down", required: true, supports: [], detail: String(e) })),
     probeWorker().catch((e: unknown): ServiceHealth => ({ id: "worker", label: "Worker", status: "down", required: true, supports: [], detail: String(e) })),
     Promise.resolve(probeResend()),
     probeGemini(),
+    probeLlmProviders().catch((): ServiceHealth => ({ id: "llm-providers", label: "LLM providers", status: "disabled", required: false, supports: [] })),
     probeTTSProviders().catch((): ServiceHealth[] => []),
   ])
 
-  const services = [pg, redis, minio, worker, ...providers, resend, gemini]
+  const services = [pg, redis, minio, worker, ...providers, llm, resend, gemini]
   const summary = {
     ok: services.filter((s) => s.status === "up").length,
     degraded: services.filter((s) => s.status === "degraded").length,
@@ -290,9 +316,9 @@ export function deriveFeatureMatrix(services: ServiceHealth[]): FeatureViability
     },
     {
       id: "script.draft",
-      label: "Gemini script drafting",
-      viable: isUp("gemini"),
-      blockedBy: !isUp("gemini") ? ["Gemini API"] : [],
+      label: "AI script drafting",
+      viable: isUp("llm-providers"),
+      blockedBy: !isUp("llm-providers") ? ["LLM provider (Gemini / Grok / Groq)"] : [],
       degradedBy: [],
     },
     {

@@ -30,6 +30,8 @@ export function VideoRevoiceGenerator() {
   const [dragOver, setDragOver] = useState(false)
   const [profileAId, setProfileAId] = useState("")
   const [profileBId, setProfileBId] = useState("")
+  const [xaiVoiceAId, setXaiVoiceAId] = useState("")
+  const [xaiVoiceBId, setXaiVoiceBId] = useState("")
   const [providerId, setProviderId] = useState("")
   const [script, setScript] = useState("")
   const [captions, setCaptions] = useState(true)
@@ -38,6 +40,7 @@ export function VideoRevoiceGenerator() {
   const fileRef = useRef<HTMLInputElement>(null)
 
   const uploadMutation = trpc.generation.requestSourceVideoUploadUrl.useMutation()
+  const { data: ttsProviders } = trpc.generation.listAvailableProviders.useQuery()
   const submitMutation = trpc.generation.submitVideoRevoice.useMutation({
     onSuccess: (data) => setGenerationId(data.generationId),
   })
@@ -51,6 +54,10 @@ export function VideoRevoiceGenerator() {
       return 0.5
     }
   }, [script])
+  const selectedTtsProvider =
+    (providerId ? ttsProviders?.find((provider) => provider.id === providerId) : ttsProviders?.find((provider) => provider.isDefault)) ??
+    ttsProviders?.[0]
+  const requiresXaiVoiceId = selectedTtsProvider?.name === "XAI_TTS"
 
   async function handleFile(file: File) {
     setUploadError(null)
@@ -97,6 +104,7 @@ export function VideoRevoiceGenerator() {
         .map((label) => ({
           label,
           profileId: label === "A" ? profileAId : profileBId || profileAId,
+          xaiVoiceId: label === "A" ? xaiVoiceAId.trim() || undefined : xaiVoiceBId.trim() || xaiVoiceAId.trim() || undefined,
           segments: segments
             .filter((s) => s.label === label)
             .map(({ startMs, endMs, text }) => ({ startMs, endMs, text })),
@@ -224,13 +232,46 @@ export function VideoRevoiceGenerator() {
             <label className="block text-caption mb-2">
               {t("speakerA")} <span className="text-[var(--color-text-muted)]">{t("hostLabel")}</span>
             </label>
-            <ProfileSelector selected={profileAId} onSelect={setProfileAId} />
+            <ProfileSelector
+              selected={profileAId}
+              onSelect={setProfileAId}
+            />
+            {requiresXaiVoiceId && (
+              <div>
+                <label htmlFor="video-xai-voice-a" className="mt-3 block text-micro text-[var(--color-text-muted)]">{t("xaiVoiceIdSpeakerA")}</label>
+                <input
+                  id="video-xai-voice-a"
+                  value={xaiVoiceAId}
+                  onChange={(event) => setXaiVoiceAId(event.target.value)}
+                  placeholder="voice_..."
+                  className="mt-1 w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui font-mono text-sm"
+                />
+                <p className="mt-1 text-micro text-[var(--color-text-muted)]">{t("xaiVoiceIdOverrideHint")}</p>
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-caption mb-2">
               {t("speakerB")} <span className="text-[var(--color-text-muted)]">{t("guestOptional")}</span>
             </label>
-            <ProfileSelector selected={profileBId} onSelect={setProfileBId} exclude={profileAId ? [profileAId] : []} />
+            <ProfileSelector
+              selected={profileBId}
+              onSelect={setProfileBId}
+              exclude={profileAId ? [profileAId] : []}
+            />
+            {requiresXaiVoiceId && (
+              <div>
+                <label htmlFor="video-xai-voice-b" className="mt-3 block text-micro text-[var(--color-text-muted)]">{t("xaiVoiceIdSpeakerB")}</label>
+                <input
+                  id="video-xai-voice-b"
+                  value={xaiVoiceBId}
+                  onChange={(event) => setXaiVoiceBId(event.target.value)}
+                  placeholder="voice_..."
+                  className="mt-1 w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui font-mono text-sm"
+                />
+                <p className="mt-1 text-micro text-[var(--color-text-muted)]">{t("xaiVoiceIdOverrideHint")}</p>
+              </div>
+            )}
           </div>
         </div>
       </section>

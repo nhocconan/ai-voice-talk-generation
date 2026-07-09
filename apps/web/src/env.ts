@@ -9,7 +9,12 @@ export const env = createEnv({
     SERVER_SECRET: z.string().min(32),
     MINIO_ENDPOINT: z.string(),
     MINIO_PORT: z.coerce.number().default(9000),
-    MINIO_USE_SSL: z.coerce.boolean().default(false),
+    // NOT z.coerce.boolean(): Boolean("false") === true, so "false" would enable
+    // SSL. Parse the string explicitly instead.
+    MINIO_USE_SSL: z
+      .string()
+      .default("false")
+      .transform((v) => v === "true" || v === "1"),
     MINIO_ACCESS_KEY: z.string(),
     MINIO_SECRET_KEY: z.string(),
     MINIO_BUCKET: z.string().default("voice-studio"),

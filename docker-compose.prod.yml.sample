@@ -239,12 +239,20 @@ services:
       # CPU stage — uses cloud LLM/TTS providers, no GPU needed.
       # For GPU hosts: target: cuda  (and add a device reservation below).
       target: base
+      args:
+        # Install the VieNeu-TTS SDK (local Vietnamese TTS, runs on CPU).
+        WORKER_EXTRAS: --extra vieneu
     image: voice-studio-worker:prod
     container_name: vc-worker
     restart: unless-stopped
     env_file: .env.prod
     environment:
       TORCH_DEVICE: cpu
+      # Cache downloaded models (VieNeu/Whisper via HF, silero-vad via torch.hub)
+      # on the persistent vc-models volume so they survive restarts instead of
+      # re-downloading ~600MB+ each time.
+      HF_HOME: /app/apps/worker/models/hf
+      TORCH_HOME: /app/apps/worker/models/torch
       DATABASE_URL: postgresql://${POSTGRES_USER:-voice}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-voice_studio}
       REDIS_URL: redis://redis:6379
       # Worker talks to MinIO internally (no public round-trip needed).

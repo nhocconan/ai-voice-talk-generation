@@ -1,0 +1,26 @@
+{
+  "name": "Voice Studio",
+  "short_name": "Voice Studio",
+  "description": "Voice cloning and AI-powered audio generation",
+  "icons": [
+    {
+      "src": "/brand/favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/brand/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/brand/voice-studio-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "theme_color": "#10151d",
+  "background_color": "#10151d",
+  "display": "standalone"
+}

@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useState } from "react"
 import { useTranslations } from "next-intl"
 import { trpc } from "@/lib/trpc/client"
-import { MicIcon, LockIcon, GlobeIcon, DownloadIcon, Loader2Icon } from "lucide-react"
+import { MicIcon, LockIcon, GlobeIcon, DownloadIcon, Loader2Icon, PencilIcon } from "lucide-react"
 import { QualityBadge } from "./QualityBadge"
 
 export function VoiceProfileList() {
@@ -61,14 +61,17 @@ export function VoiceProfileList() {
                   aria-busy={isDownloading}
                   disabled={isDownloading}
                   onClick={() => void handleExport(profile.id)}
-                  className="p-1 rounded-[var(--radius-md)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-1)] hover:text-[var(--color-text-primary)] transition-colors disabled:opacity-50"
+                  className="cursor-pointer p-1 rounded-[var(--radius-md)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-1)] hover:text-[var(--color-text-primary)] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isDownloading ? <Loader2Icon size={14} className="animate-spin" /> : <DownloadIcon size={14} />}
                 </button>
               </div>
             </div>
 
-            <h3 className="text-body-med truncate">{profile.name}</h3>
+            <Link href={`/voices/${profile.id}`} className="group inline-flex max-w-full cursor-pointer items-center gap-2">
+              <h3 className="text-body-med truncate group-hover:underline">{profile.name}</h3>
+              <PencilIcon size={13} className="shrink-0 text-[var(--color-text-muted)]" />
+            </Link>
             <p className="text-caption text-[var(--color-text-muted)] mt-0.5">
               {profile.lang.toUpperCase()} · {t("samplesCount", { count: profile.samples.length })}
             </p>

@@ -63,8 +63,9 @@ async def encode_wav_24bit(src: Path, dest: Path) -> None:
     cmd = [
         "ffmpeg", "-y", "-i", str(src),
         "-ar", str(SAMPLE_RATE),
-        "-sample_fmt", "s32",
         "-ac", "1",
+        "-codec:a", "pcm_s24le",
+        "-sample_fmt", "s32",
         str(dest),
     ]
     proc = await asyncio.create_subprocess_exec(
@@ -74,7 +75,24 @@ async def encode_wav_24bit(src: Path, dest: Path) -> None:
     )
     _, stderr = await proc.communicate()
     if proc.returncode != 0:
-        raise RuntimeError(f"WAV 24-bit encode failed: {stderr.decode()}")
+        fallback = [
+            "ffmpeg", "-y", "-i", str(src),
+            "-ar", str(SAMPLE_RATE),
+            "-ac", "1",
+            "-codec:a", "pcm_s16le",
+            str(dest),
+        ]
+        proc2 = await asyncio.create_subprocess_exec(
+            *fallback,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr2 = await proc2.communicate()
+        if proc2.returncode != 0:
+            raise RuntimeError(
+                "WAV encode failed. 24-bit error: "
+                f"{stderr.decode()}\n16-bit fallback error: {stderr2.decode()}"
+            )
 
 
 async def get_duration_ms(path: Path) -> int:

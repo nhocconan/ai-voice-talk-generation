@@ -48,6 +48,9 @@ def get_provider(
         case "XAI_TTS":
             from .xai import XAITTSProvider
             provider = XAITTSProvider(api_key_enc=api_key_enc, config=normalized_config)
+        case "MINIMAX_TTS":
+            from .minimax import MiniMaxProvider
+            provider = MiniMaxProvider(api_key_enc=api_key_enc, config=normalized_config)
         case "KOKORO":
             from .kokoro import KokoroProvider
             provider = KokoroProvider(config=normalized_config)

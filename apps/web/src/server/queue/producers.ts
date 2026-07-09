@@ -23,6 +23,26 @@ export async function enqueueIngestJob(data: IngestJobData): Promise<string> {
   return enqueueStreamJob("ingest", "ingest.enroll", data)
 }
 
+export async function allocateVoiceSampleVersion(profileId: string, latestVersion: number): Promise<number> {
+  const key = `voice-profile:${profileId}:sample-version`
+  const next = await redis.eval(
+    `
+      local current = tonumber(redis.call("GET", KEYS[1]) or "0")
+      local latest = tonumber(ARGV[1])
+      if current < latest then
+        current = latest
+      end
+      current = current + 1
+      redis.call("SET", KEYS[1], current)
+      return current
+    `,
+    1,
+    key,
+    latestVersion,
+  )
+  return Number(next)
+}
+
 export async function enqueueRenderJob(data: RenderJobData): Promise<string> {
   return enqueueStreamJob("render", "render.generation", data)
 }

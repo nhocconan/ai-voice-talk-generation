@@ -56,6 +56,17 @@ async def run_render(
         voice_refs: dict[str, VoiceRef] = {}
         for spk in speakers:
             label = spk["label"]
+
+            # Profile pins a provider-native voice_id (e.g. an xAI Console
+            # custom voice) — use it directly, no reference cloning needed.
+            pinned_voice_id = str(spk.get("provider_voice_id") or "").strip()
+            if pinned_voice_id:
+                voice_refs[label] = VoiceRef(
+                    provider_name=provider.name, data={"voice_id": pinned_voice_id}
+                )
+                logger.info("Using pinned provider voice", label=label, voice_id=pinned_voice_id)
+                continue
+
             sample_paths = []
             for key in spk.get("sample_keys", []):
                 dest = tmp_dir / f"ref_{label}_{Path(key).name}"
@@ -63,8 +74,13 @@ async def run_render(
                 sample_paths.append(dest)
 
             if sample_paths:
-                voice_refs[label] = await provider.prepare_voice(sample_paths)
-                logger.info("Voice prepared", label=label)
+                reference_paths = sample_paths
+                if len(sample_paths) > 1:
+                    combined_ref = tmp_dir / f"ref_{label}_combined.wav"
+                    stitch_segments(sample_paths, combined_ref)
+                    reference_paths = [combined_ref]
+                voice_refs[label] = await provider.prepare_voice(reference_paths)
+                logger.info("Voice prepared", label=label, samples=len(sample_paths))
 
         await progress_fn(generation_id, 0.05, "Voice references prepared")
 

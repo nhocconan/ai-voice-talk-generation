@@ -185,7 +185,7 @@ export function ImportWizard() {
         <p className="text-body text-[var(--color-text-secondary)] mb-6">{t("importDoneDesc")}</p>
         <button
           onClick={() => router.push("/voices")}
-          className="h-10 px-6 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button hover:opacity-90 transition-opacity"
+          className="h-10 cursor-pointer px-6 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button hover:opacity-90 transition-opacity"
         >
           {t("allProfiles")}
         </button>
@@ -240,7 +240,7 @@ export function ImportWizard() {
           <button
             onClick={runImport}
             disabled={phase === "importing"}
-            className="h-10 px-6 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button disabled:opacity-50 hover:opacity-90 transition-opacity"
+            className="h-10 cursor-pointer px-6 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button disabled:cursor-not-allowed disabled:opacity-50 hover:opacity-90 transition-opacity"
           >
             {phase === "importing"
               ? t("importProgress", { done: progress.done, total: progress.total })

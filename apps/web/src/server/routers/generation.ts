@@ -40,6 +40,7 @@ const speakerSchema = z.object({
   label: z.enum(["A", "B"]),
   profileId: z.string(),
   segments: z.array(segmentSchema),
+  xaiVoiceId: z.string().trim().max(200).optional(),
 })
 
 export const generationRouter = router({
@@ -128,6 +129,7 @@ export const generationRouter = router({
       script: z.string().min(10),
       estimatedMinutes: z.number().min(0.1).max(INPUT_GENERATION_MINUTES_CAP),
       providerId: z.string().optional(),
+      xaiVoiceId: z.string().trim().max(200).optional(),
       audiogram: z.boolean().default(false),
       audiogramTitle: z.string().max(120).optional(),
     }))
@@ -135,9 +137,9 @@ export const generationRouter = router({
       await enforceRenderRateLimit(ctx.session.user.id)
       await enforceQuota(ctx, input.estimatedMinutes)
       await enforceGenerationLimit(ctx.db, input.estimatedMinutes)
-      await assertProfilesReady(ctx.db, [input.profileId])
-
       const providerId = await resolveProvider(ctx, input.providerId)
+      await assertProfilesReady(ctx.db, [input.profileId], providerId)
+      await assertXaiVoiceInputs(ctx.db, providerId, [input.xaiVoiceId])
 
       const generation = await ctx.db.generation.create({
         data: {
@@ -161,7 +163,7 @@ export const generationRouter = router({
         generationId: generation.id,
         providerId,
         kind: "PRESENTATION",
-        speakers: [{ label: "A", profileId: input.profileId, segments: [], script: input.script }],
+        speakers: [{ label: "A", profileId: input.profileId, segments: [], script: input.script, xaiVoiceId: input.xaiVoiceId }],
         output: { mp3: true, wav: true, chapters: false, audiogram: input.audiogram },
         pacingLock: false,
         ...(input.audiogramTitle ? { audiogramTitle: input.audiogramTitle } : {}),
@@ -185,8 +187,9 @@ export const generationRouter = router({
       await enforceRenderRateLimit(ctx.session.user.id)
       await enforceQuota(ctx, input.estimatedMinutes)
       await enforceGenerationLimit(ctx.db, input.estimatedMinutes)
-      await assertProfilesReady(ctx.db, input.speakers.map((speaker) => speaker.profileId))
       const providerId = await resolveProvider(ctx, input.providerId)
+      await assertProfilesReady(ctx.db, input.speakers.map((speaker) => speaker.profileId), providerId)
+      await assertXaiVoiceInputs(ctx.db, providerId, input.speakers.map((speaker) => speaker.xaiVoiceId))
 
       const script = input.speakers
         .flatMap((s) => s.segments)
@@ -256,8 +259,9 @@ export const generationRouter = router({
       await enforceRenderRateLimit(ctx.session.user.id)
       await enforceQuota(ctx, input.estimatedMinutes)
       await enforceGenerationLimit(ctx.db, input.estimatedMinutes)
-      await assertProfilesReady(ctx.db, input.speakers.map((speaker) => speaker.profileId))
       const providerId = await resolveProvider(ctx, input.providerId)
+      await assertProfilesReady(ctx.db, input.speakers.map((speaker) => speaker.profileId), providerId)
+      await assertXaiVoiceInputs(ctx.db, providerId, input.speakers.map((speaker) => speaker.xaiVoiceId))
 
       const generation = await ctx.db.generation.create({
         data: {
@@ -324,8 +328,9 @@ export const generationRouter = router({
       await enforceRenderRateLimit(ctx.session.user.id)
       await enforceQuota(ctx, input.estimatedMinutes)
       await enforceGenerationLimit(ctx.db, input.estimatedMinutes)
-      await assertProfilesReady(ctx.db, input.speakers.map((s) => s.profileId))
       const providerId = await resolveProvider(ctx, input.providerId)
+      await assertProfilesReady(ctx.db, input.speakers.map((s) => s.profileId), providerId)
+      await assertXaiVoiceInputs(ctx.db, providerId, input.speakers.map((speaker) => speaker.xaiVoiceId))
 
       const generation = await ctx.db.generation.create({
         data: {
@@ -525,10 +530,12 @@ export const generationRouter = router({
       profileId: z.string(),
       script: z.string().min(10),
       providerId: z.string().optional(),
+      xaiVoiceId: z.string().trim().max(200).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await assertProfilesReady(ctx.db, [input.profileId])
       const providerId = await resolveProvider(ctx, input.providerId)
+      await assertProfilesReady(ctx.db, [input.profileId], providerId)
+      await assertXaiVoiceInputs(ctx.db, providerId, [input.xaiVoiceId])
 
       const workerUrl = process.env["WORKER_URL"] ?? "http://localhost:8001"
       const resp = await fetch(`${workerUrl}/preview`, {
@@ -538,6 +545,7 @@ export const generationRouter = router({
           provider_id: providerId,
           profile_id: input.profileId,
           script: input.script,
+          xai_voice_id: input.xaiVoiceId,
           max_chars: 250,
         }),
       })
@@ -804,14 +812,21 @@ function formatMs(ms: number): string {
 export async function assertProfilesReady(
   prisma: typeof db,
   profileIds: string[],
+  providerId?: string,
 ): Promise<void> {
   const uniqueProfileIds = [...new Set(profileIds)]
+  const provider = providerId
+    ? await prisma.providerConfig.findUnique({ where: { id: providerId }, select: { name: true } })
+    : null
+  const providerName = provider?.name
+
   const profiles = await prisma.voiceProfile.findMany({
     where: { id: { in: uniqueProfileIds } },
     select: {
       id: true,
       name: true,
       activeVersion: true,
+      providerVoiceIds: true,
       samples: {
         select: { version: true },
       },
@@ -822,11 +837,50 @@ export async function assertProfilesReady(
     throw new TRPCError({ code: "BAD_REQUEST", message: "One or more voice profiles were not found" })
   }
 
-  const notReady = profiles.find((profile) => !profile.samples.some((sample) => sample.version === profile.activeVersion))
+  const notReady = profiles.find((profile) => {
+    const providerVoiceIds = (profile.providerVoiceIds as Record<string, unknown> | null) ?? {}
+    const hasPinnedProviderVoice =
+      providerName && typeof providerVoiceIds[providerName] === "string" && providerVoiceIds[providerName].trim().length > 0
+    if (providerName === ProviderName.XAI_TTS) return false
+    const hasActiveSample = profile.samples.some((sample) => sample.version === profile.activeVersion)
+    return !hasPinnedProviderVoice && !hasActiveSample
+  })
   if (notReady) {
+    if (providerName === ProviderName.XAI_TTS) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `Voice profile "${notReady.name}" must have an xAI Voice ID before rendering with xAI.`,
+      })
+    }
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: `Voice profile "${notReady.name}" is still processing. Wait for its active sample to finish ingesting before rendering.`,
+    })
+  }
+}
+
+export async function assertXaiVoiceInputs(
+  prisma: typeof db,
+  providerId: string,
+  voiceIds: Array<string | undefined>,
+): Promise<void> {
+  const provider = await prisma.providerConfig.findUnique({
+    where: { id: providerId },
+    select: { name: true, config: true },
+  })
+  if (provider?.name !== ProviderName.XAI_TTS) return
+
+  const config =
+    provider.config && typeof provider.config === "object" && !Array.isArray(provider.config)
+      ? (provider.config as Record<string, unknown>)
+      : {}
+  const defaultVoiceId = typeof config["defaultVoiceId"] === "string" ? config["defaultVoiceId"].trim() : ""
+  const hasMissingVoiceId = voiceIds.some((voiceId) => !voiceId?.trim())
+
+  if (hasMissingVoiceId && !defaultVoiceId) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "xAI requires either a per-speaker Voice ID or a Default xAI Voice ID in provider settings.",
     })
   }
 }

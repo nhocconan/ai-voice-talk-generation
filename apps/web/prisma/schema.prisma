@@ -169,6 +169,10 @@ model VoiceProfile {
   isOrgShared   Boolean    @default(false)
   isLocked      Boolean    @default(false)
   activeVersion Int        @default(1)
+  // Provider-native voice IDs pinned per profile, e.g. {"XAI_TTS": "abc123"}.
+  // When the render provider has a pinned ID here, the worker uses it directly
+  // and skips reference-sample cloning for that speaker.
+  providerVoiceIds Json    @default("{}")
   consent       Json
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
@@ -212,6 +216,7 @@ enum ProviderName {
   VIBEVOICE
   XIAOMI_TTS
   XAI_TTS
+  MINIMAX_TTS
   KOKORO
   INDEXTTS2
   // LLM providers — power the "draft script" feature (kind=LLM models)

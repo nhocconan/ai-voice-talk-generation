@@ -19,7 +19,10 @@ import { Prisma } from "@prisma/client"
 import { db } from "@/server/db/client"
 import { encryptApiKey, decryptApiKey } from "@/server/services/crypto"
 
-const CLIENT_ID = process.env["XAI_OAUTH_CLIENT_ID"] ?? "b1a00492-073a-47ea-816f-4c329264a828"
+// `||` not `??`: an empty env value must fall back to the default, else the
+// device flow 400s with "client_id is required".
+// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+const CLIENT_ID = process.env["XAI_OAUTH_CLIENT_ID"] || "b1a00492-073a-47ea-816f-4c329264a828"
 const SCOPE = "openid profile email offline_access grok-cli:access api:access"
 const REFERRER = "hermes-agent"
 const ISSUER = "https://auth.x.ai"

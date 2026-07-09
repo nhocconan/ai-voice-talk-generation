@@ -58,42 +58,60 @@ export function GenerationHistoryList() {
 
   return (
     <div className="space-y-3">
-      {items.map((item) => (
-        <div
-          key={item.id}
-          className="flex items-center justify-between rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-3"
-        >
-          <div className="flex items-center gap-4">
-            <span className="text-sm font-medium text-[var(--color-text-primary)]">
-              {KIND_KEYS[item.kind] ? t(KIND_KEYS[item.kind]) : item.kind}
-            </span>
-            <span
-              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[item.status] ?? "bg-gray-100"}`}
-            >
-              {STATUS_KEYS[item.status] ? t(STATUS_KEYS[item.status]) : item.status}
-            </span>
-            {item.durationMs && (
-              <span className="text-xs text-[var(--color-text-tertiary)]">
-                {formatMs(item.durationMs)}
-              </span>
-            )}
-          </div>
+      {items.map((item) => {
+        const canPlay = item.status === "DONE" && Boolean(item.outputMp3Key ?? item.outputWavKey);
 
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-[var(--color-text-tertiary)]">
-              {new Date(item.createdAt).toLocaleDateString()}
-            </span>
-            {item.status === "DONE" && item.outputMp3Key && (
-              <a
-                href={`/api/download/${item.id}`}
-                className="rounded-md bg-[var(--color-accent)] px-3 py-1 text-xs font-medium text-white hover:bg-[var(--color-accent-hover)]"
-              >
-                {t("download")}
-              </a>
+        return (
+          <div
+            key={item.id}
+            className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-3"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm font-medium text-[var(--color-text-primary)]">
+                  {KIND_KEYS[item.kind] ? t(KIND_KEYS[item.kind]) : item.kind}
+                </span>
+                <span
+                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[item.status] ?? "bg-gray-100"}`}
+                >
+                  {STATUS_KEYS[item.status] ? t(STATUS_KEYS[item.status]) : item.status}
+                </span>
+                {item.durationMs && (
+                  <span className="text-xs text-[var(--color-text-tertiary)]">
+                    {formatMs(item.durationMs)}
+                  </span>
+                )}
+                <span className="text-xs text-[var(--color-text-tertiary)]">
+                  {new Date(item.createdAt).toLocaleDateString()}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {canPlay && (
+                  <a
+                    href={`/api/download/${item.id}`}
+                    className="rounded-md bg-[var(--color-accent)] px-3 py-1 text-xs font-medium text-white hover:bg-[var(--color-accent-hover)]"
+                  >
+                    {t("download")}
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {canPlay && (
+              <div className="mt-3">
+                <audio
+                  controls
+                  preload="none"
+                  src={`/api/download/${item.id}`}
+                  className="h-10 w-full"
+                  aria-label={t("preview")}
+                />
+              </div>
             )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

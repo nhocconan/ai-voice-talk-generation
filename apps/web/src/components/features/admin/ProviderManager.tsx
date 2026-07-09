@@ -18,6 +18,15 @@ import {
 } from "@/lib/providers-meta"
 
 type DraftValue = string | boolean
+interface ProviderRow {
+  id: string
+  name: string
+  enabled: boolean
+  isDefault: boolean
+  apiKeyEnc: string | null
+  apiKeyLast4?: unknown
+  config: unknown
+}
 
 function isConfigRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -290,9 +299,9 @@ export function ProviderManager() {
     }
   }
 
-  return (
-    <div className="space-y-3">
-      {providers?.map((provider) => {
+  const enabledProviders = (providers ?? []).filter((provider) => provider.enabled)
+  const availableProviders = (providers ?? []).filter((provider) => !provider.enabled)
+  const renderProviderCard = (provider: ProviderRow) => {
         const meta = getProviderMeta(provider.name, locale)
         const result = testResult[provider.id]
         const expanded = expandedId === provider.id
@@ -407,9 +416,10 @@ export function ProviderManager() {
                   />
                   <button
                     onClick={async () => {
-                      const probe = await runTest(provider.id, apiKey)
+                      const nextApiKey = apiKey.trim()
+                      const probe = await runTest(provider.id, nextApiKey)
                       if (!probe.ok) return
-                      await update.mutateAsync({ id: provider.id, apiKey })
+                      await update.mutateAsync({ id: provider.id, apiKey: nextApiKey })
                       stopEditing()
                     }}
                     disabled={!apiKey || update.isPending || testingId === provider.id}
@@ -420,7 +430,7 @@ export function ProviderManager() {
                   </button>
                   <button
                     onClick={async () => {
-                      await update.mutateAsync({ id: provider.id, apiKey })
+                      await update.mutateAsync({ id: provider.id, apiKey: apiKey.trim() })
                       stopEditing()
                     }}
                     disabled={!apiKey || update.isPending}
@@ -609,7 +619,27 @@ export function ProviderManager() {
             )}
           </div>
         )
-      })}
+  }
+  const renderSection = (title: string, items: ProviderRow[]) => (
+    <section className="space-y-3">
+      <div className="flex items-center gap-2">
+        <h3 className="text-body-med text-[var(--color-text-primary)]">{title}</h3>
+        <span className="text-micro text-[var(--color-text-muted)]">{items.length}</span>
+      </div>
+      {items.length > 0 ? (
+        items.map(renderProviderCard)
+      ) : (
+        <p className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface-0)] p-4 text-caption text-[var(--color-text-muted)]">
+          {t("providers.emptySection")}
+        </p>
+      )}
+    </section>
+  )
+
+  return (
+    <div className="space-y-8">
+      {renderSection(t("providers.enabledSection"), enabledProviders)}
+      {renderSection(t("providers.availableSection"), availableProviders)}
     </div>
   )
 }

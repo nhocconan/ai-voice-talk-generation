@@ -67,6 +67,7 @@ async def _db_update_sample(
     import os
 
     import psycopg2  # type: ignore[import]
+    import psycopg2.extras  # type: ignore[import]
 
     conn = psycopg2.connect(os.environ["DATABASE_URL"])
     try:
@@ -260,8 +261,16 @@ async def _get_provider_for_generation(provider_id: str):
     )
 
 
-async def _get_speaker_sample_keys(speakers: list[dict]) -> list[dict]:
-    """For each speaker, fetch the active sample storage key."""
+async def _get_speaker_sample_keys(
+    speakers: list[dict], provider_name: str | None = None
+) -> list[dict]:
+    """For each speaker, fetch all accepted sample storage keys.
+
+    When the profile has a pinned provider-native voice_id for the render
+    provider (voice_profiles.providerVoiceIds), it is surfaced as
+    `provider_voice_id` so pipelines can skip reference-sample cloning.
+    """
+    import json as _json
     import os
 
     import psycopg2
@@ -273,17 +282,34 @@ async def _get_speaker_sample_keys(speakers: list[dict]) -> list[dict]:
             result = []
             for spk in speakers:
                 cur.execute(
-                    """SELECT vs."storageKey", vp.lang FROM voice_samples vs
-                       JOIN voice_profiles vp ON vp.id = vs."profileId"
-                       WHERE vs."profileId"=%s AND vs.version = vp."activeVersion" """,
+                    """SELECT lang, "providerVoiceIds"
+                       FROM voice_profiles
+                       WHERE id=%s""",
                     (spk["profileId"],),
                 )
-                row = cur.fetchone()
+                profile_row = cur.fetchone()
+                voice_ids = profile_row["providerVoiceIds"] if profile_row else {}
+                if isinstance(voice_ids, (str, bytes, bytearray)):
+                    voice_ids = _json.loads(voice_ids)
+                payload_voice_id = str(spk.get("xaiVoiceId") or spk.get("xai_voice_id") or "").strip()
+                pinned = payload_voice_id if provider_name == "XAI_TTS" else ((voice_ids or {}).get(provider_name, "") if provider_name else "")
+
+                sample_rows = []
+                if provider_name != "XAI_TTS":
+                    cur.execute(
+                        """SELECT "storageKey"
+                           FROM voice_samples
+                           WHERE "profileId"=%s
+                           ORDER BY version ASC""",
+                        (spk["profileId"],),
+                    )
+                    sample_rows = cur.fetchall()
                 result.append(
                     {
                         **spk,
-                        "sample_keys": [row["storageKey"]] if row else [],
-                        "lang": row["lang"] if row else "vi",
+                        "sample_keys": [row["storageKey"] for row in sample_rows],
+                        "lang": profile_row["lang"] if profile_row else "vi",
+                        "provider_voice_id": str(pinned).strip(),
                     }
                 )
         return result
@@ -363,7 +389,8 @@ async def handle_render(job_name: str, data: object) -> None:
             conn.close()
 
             speakers = await _get_speaker_sample_keys(
-                [speaker.model_dump(by_alias=True) for speaker in data.speakers]
+                [speaker.model_dump(by_alias=True) for speaker in data.speakers],
+                provider_name=provider.name,
             )
 
             async def progress(gid: str, pct: float, msg: str) -> None:
@@ -419,7 +446,8 @@ async def handle_video_revoice(job_name: str, data: object) -> None:
             conn.close()
 
             speakers = await _get_speaker_sample_keys(
-                [s.model_dump(by_alias=True) for s in data.speakers]
+                [s.model_dump(by_alias=True) for s in data.speakers],
+                provider_name=provider.name,
             )
 
             async def progress(gid: str, pct: float, msg: str) -> None:
@@ -532,6 +560,7 @@ class PreviewRequest(_BaseModel):
     provider_id: str
     profile_id: str
     script: str
+    xai_voice_id: str | None = None
     # How many characters to render (≈15 s at average speaking rate)
     max_chars: int = 250
 
@@ -552,7 +581,10 @@ async def preview_audio(req: PreviewRequest):
 
     try:
         provider = await _get_provider_for_generation(req.provider_id)
-        speakers = await _get_speaker_sample_keys([{"label": "A", "profileId": req.profile_id, "segments": []}])
+        speakers = await _get_speaker_sample_keys(
+            [{"label": "A", "profileId": req.profile_id, "segments": [], "xaiVoiceId": req.xai_voice_id}],
+            provider_name=provider.name,
+        )
         spk = speakers[0]
 
         # Trim script to max_chars at sentence boundary
@@ -562,12 +594,14 @@ async def preview_audio(req: PreviewRequest):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_dir = Path(tmp)
             # Download reference sample
-            voice_ref = VoiceRef("", {})
-            for key in spk.get("sample_keys", []):
-                dest = tmp_dir / Path(key).name
-                await asyncio.to_thread(download_object, key, dest)
-                voice_ref = await provider.prepare_voice([dest])
-                break
+            pinned_voice_id = str(spk.get("provider_voice_id") or "").strip()
+            voice_ref = VoiceRef(provider.name, {"voice_id": pinned_voice_id}) if pinned_voice_id else VoiceRef("", {})
+            if not pinned_voice_id:
+                for key in spk.get("sample_keys", []):
+                    dest = tmp_dir / Path(key).name
+                    await asyncio.to_thread(download_object, key, dest)
+                    voice_ref = await provider.prepare_voice([dest])
+                    break
 
             # Render chunks
             from .audio.stitch import stitch_segments

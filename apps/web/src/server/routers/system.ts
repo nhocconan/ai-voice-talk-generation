@@ -2,7 +2,7 @@ import { z } from "zod"
 import { TRPCError } from "@trpc/server"
 import { router, adminProcedure, protectedProcedure } from "@/server/trpc"
 import { runHealthCheck, deriveFeatureMatrix } from "@/server/services/health"
-import { decryptApiKey } from "@/server/services/crypto"
+import { decryptApiKey, normalizeApiKey } from "@/server/services/crypto"
 import { getAccessToken, isConnected } from "@/server/services/xai-oauth"
 
 export const systemRouter = router({
@@ -26,8 +26,9 @@ export const systemRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const provider = await ctx.db.providerConfig.findUniqueOrThrow({ where: { id: input.id } })
-      const apiKey = input.apiKey
-        ?? (provider.apiKeyEnc ? await decryptApiKey(provider.apiKeyEnc) : "")
+      const apiKey = normalizeApiKey(
+        input.apiKey ?? (provider.apiKeyEnc ? await decryptApiKey(provider.apiKeyEnc) : ""),
+      )
 
       switch (provider.name) {
         case "ELEVENLABS": {
@@ -102,18 +103,55 @@ export const systemRouter = router({
         case "XAI_TTS": {
           if (!apiKey) throw new TRPCError({ code: "BAD_REQUEST", message: "API key required" })
           try {
+            const modelsResp = await fetch("https://api.x.ai/v1/models", {
+              headers: { Authorization: `Bearer ${apiKey}` },
+            })
+            if (!modelsResp.ok) {
+              const body = await modelsResp.text()
+              return { ok: false, message: `xAI key check failed (HTTP ${modelsResp.status}): ${body.slice(0, 200)}` }
+            }
+
             const resp = await fetch("https://api.x.ai/v1/tts/voices", {
               headers: { Authorization: `Bearer ${apiKey}` },
             })
             if (!resp.ok) {
               const body = await resp.text()
-              return { ok: false, message: `xAI HTTP ${resp.status}: ${body.slice(0, 200)}` }
+              return { ok: false, message: `xAI key is valid, but TTS voices failed (HTTP ${resp.status}): ${body.slice(0, 200)}` }
             }
             const data = (await resp.json()) as { voices?: unknown[]; data?: unknown[] }
             const voices = data.voices ?? data.data ?? []
             return { ok: true, message: `xAI live. ${voices.length} voices reachable.` }
           } catch (e) {
             return { ok: false, message: `Could not reach xAI: ${String(e)}` }
+          }
+        }
+
+        case "MINIMAX_TTS": {
+          if (!apiKey) throw new TRPCError({ code: "BAD_REQUEST", message: "API key required" })
+          try {
+            const resp = await fetch("https://api.minimax.io/v1/get_voice", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ voice_type: "voice_cloning" }),
+            })
+            if (!resp.ok) {
+              const body = await resp.text()
+              return { ok: false, message: `MiniMax HTTP ${resp.status}: ${body.slice(0, 200)}` }
+            }
+            const data = (await resp.json()) as {
+              base_resp?: { status_code?: number; status_msg?: string }
+              voice_cloning?: unknown[]
+            }
+            if (data.base_resp?.status_code !== 0) {
+              return {
+                ok: false,
+                message: `MiniMax error ${data.base_resp?.status_code}: ${(data.base_resp?.status_msg ?? "").slice(0, 200)}`,
+              }
+            }
+            const count = data.voice_cloning?.length ?? 0
+            return { ok: true, message: `MiniMax live. ${count} cloned voice(s) registered.` }
+          } catch (e) {
+            return { ok: false, message: `Could not reach MiniMax: ${String(e)}` }
           }
         }
 

@@ -6,8 +6,17 @@ import { ThemeProvider } from "@/components/features/shell/ThemeProvider"
 import "@/styles/globals.css"
 
 export const metadata: Metadata = {
+  applicationName: "Voice Studio",
   title: { default: "Voice Studio", template: "%s | Voice Studio" },
   description: "Voice cloning and AI-powered podcast & presentation generator for Demo leadership",
+  manifest: "/site.webmanifest",
+  icons: {
+    icon: [
+      { url: "/brand/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/brand/voice-studio-icon.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/brand/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 }
 
 // Runs before first paint to set the theme class, avoiding a flash of the wrong

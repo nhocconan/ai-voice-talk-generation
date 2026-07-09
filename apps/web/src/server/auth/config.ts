@@ -5,6 +5,8 @@ import { z } from "zod"
 import { env } from "@/env"
 import { db } from "@/server/db/client"
 import { writeAuditLog } from "@/server/services/audit"
+import { isLoginLocked, recordLoginFailure, clearLoginFailures } from "@/server/services/rate-limit"
+import { verifyRecaptchaToken } from "@/server/services/recaptcha"
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -17,20 +19,36 @@ export const authConfig: NextAuthConfig = {
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        recaptchaToken: { label: "reCAPTCHA", type: "text" },
       },
       async authorize(credentials, request) {
         const parsed = loginSchema.safeParse(credentials)
         if (!parsed.success) return null
+        const email = parsed.data.email
+        const ip = request.headers?.get("x-forwarded-for")?.split(",")[0]?.trim()
 
-        const user = await db.user.findUnique({ where: { email: parsed.data.email } })
-        if (!user || !user.active) return null
+        // Brute-force lockout: too many recent failures → reject before checking.
+        if (await isLoginLocked(email)) return null
+
+        // reCAPTCHA (no-op unless enabled in Admin → Settings).
+        const recaptchaToken = typeof credentials?.["recaptchaToken"] === "string" ? credentials["recaptchaToken"] : ""
+        if (!(await verifyRecaptchaToken(recaptchaToken, ip))) return null
+
+        const user = await db.user.findUnique({ where: { email } })
+        if (!user || !user.active) {
+          await recordLoginFailure(email)
+          return null
+        }
 
         const valid = await bcrypt.compare(parsed.data.password, user.passwordHash)
-        if (!valid) return null
+        if (!valid) {
+          await recordLoginFailure(email)
+          return null
+        }
 
+        await clearLoginFailures(email)
         await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
 
-        const ip = request.headers?.get("x-forwarded-for") ?? undefined
         await writeAuditLog({
           actorId: user.id,
           action: "auth.login",

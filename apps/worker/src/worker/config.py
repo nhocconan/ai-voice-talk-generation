@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = ""
     xiaomi_api_key: str = ""
     xai_api_key: str = ""
+    minimax_api_key: str = ""
 
     torch_device: str = "cpu"
     worker_concurrency: int = 1

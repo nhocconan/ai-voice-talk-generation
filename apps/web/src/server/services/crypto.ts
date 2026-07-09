@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url)
 let sodiumPromise: Promise<import("libsodium-wrappers-sumo").SodiumModule> | undefined
 
 export async function encryptApiKey(plaintext: string): Promise<string> {
-  return encryptApiKeySealedBox(plaintext)
+  return encryptApiKeySealedBox(normalizeApiKey(plaintext))
 }
 
 export async function decryptApiKey(ciphertext: string): Promise<string> {
@@ -18,6 +18,20 @@ export async function decryptApiKey(ciphertext: string): Promise<string> {
   }
 
   return decryptApiKeyLegacy(ciphertext)
+}
+
+export function normalizeApiKey(value: string): string {
+  let next = value.trim()
+  if (
+    (next.startsWith('"') && next.endsWith('"')) ||
+    (next.startsWith("'") && next.endsWith("'"))
+  ) {
+    next = next.slice(1, -1).trim()
+  }
+  if (next.toLowerCase().startsWith("bearer ")) {
+    next = next.slice(7).trim()
+  }
+  return next
 }
 
 function decryptApiKeyLegacy(ciphertext: string): string {

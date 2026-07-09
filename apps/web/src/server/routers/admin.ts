@@ -2,8 +2,9 @@ import { z } from "zod"
 import { router, adminProcedure, superAdminProcedure } from "@/server/trpc"
 import { ModelKind, Prisma, Role } from "@prisma/client"
 import { TRPCError } from "@trpc/server"
-import { encryptApiKey, decryptApiKey } from "@/server/services/crypto"
+import { encryptApiKey, decryptApiKey, normalizeApiKey } from "@/server/services/crypto"
 import { fetchProviderCatalog } from "@/server/services/provider-models"
+import { getRecaptchaAdminView, saveRecaptchaConfig } from "@/server/services/recaptcha"
 import {
   generatePkce,
   startDeviceAuth,
@@ -143,9 +144,10 @@ export const adminRouter = router({
           : {}
 
       if (apiKey !== undefined) {
-        data.apiKeyEnc = apiKey ? await encryptApiKey(apiKey) : null
-        if (apiKey) {
-          currentConfig["apiKeyLast4"] = apiKey.slice(-4)
+        const normalizedApiKey = normalizeApiKey(apiKey)
+        data.apiKeyEnc = normalizedApiKey ? await encryptApiKey(normalizedApiKey) : null
+        if (normalizedApiKey) {
+          currentConfig["apiKeyLast4"] = normalizedApiKey.slice(-4)
         } else {
           delete currentConfig["apiKeyLast4"]
         }
@@ -449,6 +451,35 @@ export const adminRouter = router({
         targetId: input.key,
         meta: { value: validatedValue } as Prisma.InputJsonValue,
       })
+    }),
+
+  // reCAPTCHA (login protection) — configured here, not via env.
+  getRecaptcha: adminProcedure.query(async () => {
+    return getRecaptchaAdminView()
+  }),
+
+  updateRecaptcha: superAdminProcedure
+    .input(z.object({
+      enabled: z.boolean(),
+      siteKey: z.string(),
+      version: z.enum(["v2", "v3"]),
+      minScore: z.number().min(0).max(1).optional(),
+      secretKey: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await saveRecaptchaConfig(input)
+      } catch (e) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: e instanceof Error ? e.message : "Failed to save reCAPTCHA" })
+      }
+      await ctx.audit({
+        actorId: ctx.session.user.id,
+        action: "admin.updateRecaptcha",
+        targetType: "Setting",
+        targetId: "security.recaptcha",
+        meta: { enabled: input.enabled, version: input.version },
+      })
+      return { ok: true }
     }),
 
   // Generation library

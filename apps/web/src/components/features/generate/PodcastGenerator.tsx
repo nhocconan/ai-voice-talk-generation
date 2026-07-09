@@ -15,12 +15,15 @@ export function PodcastGenerator() {
   const t = useTranslations("generate")
   const [profileAId, setProfileAId] = useState("")
   const [profileBId, setProfileBId] = useState("")
+  const [xaiVoiceAId, setXaiVoiceAId] = useState("")
+  const [xaiVoiceBId, setXaiVoiceBId] = useState("")
   const [providerId, setProviderId] = useState("")
   const [script, setScript] = useState(DEFAULT_SCRIPT)
   const [generationId, setGenerationId] = useState<string | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
 
   const utils = trpc.useUtils()
+  const { data: ttsProviders } = trpc.generation.listAvailableProviders.useQuery()
   const mutation = trpc.generation.createPodcast.useMutation({
     onSuccess: (data) => {
       setGenerationId(data.generationId)
@@ -33,6 +36,10 @@ export function PodcastGenerator() {
     const lastEndMs = segments.at(-1)?.endMs ?? 30_000
     return Math.max(0.5, Math.min(60, lastEndMs / 60_000))
   }, [script])
+  const selectedTtsProvider =
+    (providerId ? ttsProviders?.find((provider) => provider.id === providerId) : ttsProviders?.find((provider) => provider.isDefault)) ??
+    ttsProviders?.[0]
+  const requiresXaiVoiceId = selectedTtsProvider?.name === "XAI_TTS"
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -45,6 +52,7 @@ export function PodcastGenerator() {
         .map((label) => ({
           label,
           profileId: label === "A" ? profileAId : (profileBId || profileAId),
+          xaiVoiceId: label === "A" ? xaiVoiceAId.trim() || undefined : xaiVoiceBId.trim() || xaiVoiceAId.trim() || undefined,
           segments: segments
             .filter((segment) => segment.label === label)
             .map(({ startMs, endMs, text }) => ({ startMs, endMs, text })),
@@ -79,6 +87,19 @@ export function PodcastGenerator() {
             value={profileAId}
             onChange={setProfileAId}
           />
+          {requiresXaiVoiceId && (
+            <div>
+              <label htmlFor="xai-voice-a" className="mt-3 block text-xs text-[var(--color-text-secondary)]">{t("xaiVoiceIdSpeakerA")}</label>
+              <input
+                id="xai-voice-a"
+                value={xaiVoiceAId}
+                onChange={(event) => setXaiVoiceAId(event.target.value)}
+                placeholder="voice_..."
+                className="mt-1 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] px-3 py-2 text-sm font-mono"
+              />
+              <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">{t("xaiVoiceIdOverrideHint")}</p>
+            </div>
+          )}
         </div>
         <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-5 space-y-4">
           <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">{t("speakerB")}</h2>
@@ -86,6 +107,19 @@ export function PodcastGenerator() {
             value={profileBId}
             onChange={setProfileBId}
           />
+          {requiresXaiVoiceId && (
+            <div>
+              <label htmlFor="xai-voice-b" className="mt-3 block text-xs text-[var(--color-text-secondary)]">{t("xaiVoiceIdSpeakerB")}</label>
+              <input
+                id="xai-voice-b"
+                value={xaiVoiceBId}
+                onChange={(event) => setXaiVoiceBId(event.target.value)}
+                placeholder="voice_..."
+                className="mt-1 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] px-3 py-2 text-sm font-mono"
+              />
+              <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">{t("xaiVoiceIdOverrideHint")}</p>
+            </div>
+          )}
           <p className="text-xs text-[var(--color-text-tertiary)]">
             {t("reuseSpeakerA")}
           </p>

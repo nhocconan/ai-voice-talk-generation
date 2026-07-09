@@ -10,6 +10,7 @@ import { trpc } from "@/lib/trpc/client"
 import { InBrowserRecorder } from "./InBrowserRecorder"
 import { AudioUploader } from "./AudioUploader"
 import { cn } from "@/lib/utils"
+import { getGuidedPrompts } from "./guidedPrompts"
 
 const profileSchema = z.object({
   name: z.string().min(1, "Required").max(100),
@@ -17,14 +18,6 @@ const profileSchema = z.object({
   consentGiven: z.literal(true, { errorMap: () => ({ message: "Consent is required" }) }),
 })
 type ProfileFormData = z.infer<typeof profileSchema>
-
-const GUIDED_PROMPTS = [
-  "Xin chào, tôi là thành viên của đội ngũ Demo. Chúng tôi cống hiến để tạo ra những giá trị tốt nhất.",
-  "Hello, I'm part of the Demo team. We are committed to building innovative solutions for our clients.",
-  "Công nghệ và con người — đây là hai yếu tố cốt lõi trong mọi điều chúng tôi làm tại Demo.",
-  "At Demo, we believe that every great idea starts with a single conversation.",
-  "Cảm ơn bạn đã lắng nghe. Chúng tôi rất mong được hợp tác cùng bạn trong tương lai gần.",
-]
 
 type Mode = "guided" | "upload"
 type Step = "info" | "record" | "done"
@@ -38,9 +31,11 @@ export function EnrollmentWizard() {
 
   const createProfile = trpc.voiceProfile.create.useMutation()
 
-  const { register, handleSubmit, formState: { errors } } = useForm<ProfileFormData>({
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
+    defaultValues: { lang: "vi" },
   })
+  const selectedLang = watch("lang") ?? "vi"
 
   const onInfoSubmit = async (data: ProfileFormData) => {
     const profile = await createProfile.mutateAsync({
@@ -98,7 +93,7 @@ export function EnrollmentWizard() {
                     type="button"
                     onClick={() => setMode(m)}
                     className={cn(
-                      "p-4 rounded-[var(--radius-card)] text-left border transition-colors",
+                      "cursor-pointer p-4 rounded-[var(--radius-card)] text-left border transition-colors",
                       mode === m
                         ? "border-[var(--color-emphasis)] bg-[var(--color-surface-1)]"
                         : "border-[var(--color-border)] hover:bg-[var(--color-surface-1)]",
@@ -132,7 +127,7 @@ export function EnrollmentWizard() {
         <button
           type="submit"
           disabled={createProfile.isPending}
-          className="h-10 px-6 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button disabled:opacity-50 hover:opacity-90 transition-opacity"
+          className="h-10 cursor-pointer px-6 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button disabled:cursor-not-allowed disabled:opacity-50 hover:opacity-90 transition-opacity"
         >
           {createProfile.isPending ? t("creating") : t("continue")}
         </button>
@@ -149,7 +144,7 @@ export function EnrollmentWizard() {
         >
           {mode === "guided" ? (
             <InBrowserRecorder
-              prompts={GUIDED_PROMPTS}
+              prompts={getGuidedPrompts(selectedLang)}
               profileId={profileId}
               onComplete={() => setStep("done")}
             />
@@ -179,13 +174,13 @@ export function EnrollmentWizard() {
       <div className="flex gap-3 justify-center">
         <button
           onClick={() => profileId && router.push(`/voices/${profileId}`)}
-          className="h-10 px-6 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button hover:opacity-90"
+          className="h-10 cursor-pointer px-6 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button hover:opacity-90"
         >
           {t("viewProfile")}
         </button>
         <button
           onClick={() => router.push("/voices")}
-          className="h-10 px-6 rounded-[var(--radius-pill)] border border-[var(--color-border)] text-button hover:bg-[var(--color-surface-1)]"
+          className="h-10 cursor-pointer px-6 rounded-[var(--radius-pill)] border border-[var(--color-border)] text-button hover:bg-[var(--color-surface-1)]"
         >
           {t("allProfiles")}
         </button>

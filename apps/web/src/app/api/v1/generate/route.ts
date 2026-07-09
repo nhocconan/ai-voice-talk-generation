@@ -16,6 +16,7 @@ import {
   enforceQuota,
   enforceGenerationLimit,
   assertProfilesReady,
+  assertXaiVoiceInputs,
   resolveProvider,
 } from "@/server/routers/generation"
 
@@ -24,6 +25,7 @@ const bodySchema = z.object({
   script: z.string().min(10).max(500_000),
   estimatedMinutes: z.number().min(0.1).max(720),
   providerId: z.string().optional(),
+  xaiVoiceId: z.string().trim().max(200).optional(),
   audiogram: z.boolean().optional(),
   audiogramTitle: z.string().max(120).optional(),
 })
@@ -47,8 +49,9 @@ export async function POST(req: NextRequest) {
     await enforceRenderRateLimit(user.id)
     await enforceQuota({ db, session: { user: { id: user.id } } }, input.estimatedMinutes)
     await enforceGenerationLimit(db, input.estimatedMinutes)
-    await assertProfilesReady(db, [input.profileId])
     const providerId = await resolveProvider({ db }, input.providerId)
+    await assertProfilesReady(db, [input.profileId], providerId)
+    await assertXaiVoiceInputs(db, providerId, [input.xaiVoiceId])
 
     const generation = await db.generation.create({
       data: {
@@ -66,7 +69,7 @@ export async function POST(req: NextRequest) {
       generationId: generation.id,
       providerId,
       kind: "PRESENTATION",
-      speakers: [{ label: "A", profileId: input.profileId, segments: [], script: input.script }],
+      speakers: [{ label: "A", profileId: input.profileId, segments: [], script: input.script, xaiVoiceId: input.xaiVoiceId }],
       output: { mp3: true, wav: true, chapters: false, audiogram: input.audiogram ?? false },
       pacingLock: false,
       ...(input.audiogramTitle ? { audiogramTitle: input.audiogramTitle } : {}),

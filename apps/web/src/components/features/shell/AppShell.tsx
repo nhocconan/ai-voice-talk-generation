@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import type { Session } from "next-auth"
 import { signOut } from "next-auth/react"
@@ -57,9 +58,19 @@ export function AppShell({ children, session }: Props) {
       >
         {/* Logo */}
         <div className="px-6 py-5" style={{ borderBottom: "1px solid var(--color-border)" }}>
-          <Link href="/dashboard" className="block">
-            <span className="text-display-card text-[var(--color-text-primary)]">Voice</span>
-            <span className="text-display-card" style={{ color: "var(--color-accent)" }}>Studio</span>
+          <Link href="/dashboard" className="flex items-center gap-3">
+            <Image
+              src="/brand/voice-studio-icon.png"
+              alt=""
+              width={38}
+              height={38}
+              priority
+              className="rounded-[10px]"
+            />
+            <span className="leading-tight">
+              <span className="block text-body-med text-[var(--color-text-primary)]">Voice</span>
+              <span className="block text-body-med" style={{ color: "var(--color-accent)" }}>Studio</span>
+            </span>
           </Link>
         </div>
 
@@ -129,7 +140,8 @@ export function AppShell({ children, session }: Props) {
           >
             {mobileOpen ? <XIcon size={18} /> : <MenuIcon size={18} />}
           </button>
-          <span className="ml-3 text-nav">Voice Studio</span>
+          <Image src="/brand/voice-studio-icon.png" alt="" width={26} height={26} priority className="ml-3 rounded-[7px]" />
+          <span className="ml-2 text-nav">Voice Studio</span>
           <div className="ml-auto flex items-center gap-2">
             <LanguageSwitcher />
             <ThemeToggle />

@@ -19,12 +19,12 @@ const schema = z.object({
   script: z.string().min(10, "Script too short").max(500000),
   estimatedMinutes: z.coerce.number().min(0.1).max(60),
   providerId: z.string().optional(),
+  xaiVoiceId: z.string().trim().max(200).optional(),
 })
 type FormData = z.infer<typeof schema>
 
 const draftSchema = z.object({
   topic: z.string().min(3, "Topic too short"),
-  minutes: z.coerce.number().min(0.5).max(30),
   tone: z.enum(["professional", "conversational", "educational", "storytelling"]),
   lang: z.enum(["vi", "en"]),
 })
@@ -42,6 +42,7 @@ export function PresentationGenerator() {
   const create = trpc.generation.createPresentation.useMutation()
   const draftMutation = trpc.generation.draftScript.useMutation()
   const { data: llmProviders } = trpc.generation.listLlmProviders.useQuery()
+  const { data: ttsProviders } = trpc.generation.listAvailableProviders.useQuery()
 
   // Flatten enabled LLM providers × their enabled models into "Provider — Model"
   // options. Empty when no LLM provider is configured (draftScript then falls
@@ -67,17 +68,21 @@ export function PresentationGenerator() {
 
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { estimatedMinutes: 5, providerId: "" },
+    defaultValues: { estimatedMinutes: 5, providerId: "", xaiVoiceId: "" },
   })
 
   const draftForm = useForm<DraftForm>({
     resolver: zodResolver(draftSchema),
-    defaultValues: { tone: "professional", lang: "vi", minutes: 5 },
+    defaultValues: { tone: "professional", lang: "vi" },
   })
 
   const profileId = watch("profileId")
   const providerId = watch("providerId")
   const estimatedMinutes = watch("estimatedMinutes")
+  const selectedTtsProvider =
+    (providerId ? ttsProviders?.find((provider) => provider.id === providerId) : ttsProviders?.find((provider) => provider.isDefault)) ??
+    ttsProviders?.[0]
+  const requiresXaiVoiceId = selectedTtsProvider?.name === "XAI_TTS"
 
   const onSubmit = async (data: FormData) => {
     const { generationId: id } = await create.mutateAsync(data)
@@ -85,14 +90,16 @@ export function PresentationGenerator() {
   }
 
   const onDraft = async (data: DraftForm) => {
+    const minutes = z.coerce.number().min(0.5).max(30).parse(estimatedMinutes)
     const { script } = await draftMutation.mutateAsync({
       ...data,
+      minutes,
       ...(selectedOption
         ? { providerId: selectedOption.providerId, model: selectedOption.model }
         : {}),
     })
     setValue("script", script)
-    setValue("estimatedMinutes", data.minutes)
+    setValue("estimatedMinutes", minutes)
     setDraftedBy(selectedOption?.caption ?? null)
     setShowDraft(false)
   }
@@ -124,10 +131,11 @@ export function PresentationGenerator() {
             <input
               id="estimatedMinutes"
               type="number"
-              step="0.5"
+              step="any"
               min="0.5"
               max="60"
-              {...register("estimatedMinutes")}
+              inputMode="decimal"
+              {...register("estimatedMinutes", { valueAsNumber: true })}
               className="w-32 px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui"
             />
           </div>
@@ -137,6 +145,21 @@ export function PresentationGenerator() {
             onChange={(id) => setValue("providerId", id)}
             description={t("providerCompareHint")}
           />
+
+          {requiresXaiVoiceId && (
+            <div>
+              <label htmlFor="xaiVoiceId" className="block text-caption mb-2">
+                {t("xaiVoiceIdOverride")}
+              </label>
+              <input
+                id="xaiVoiceId"
+                {...register("xaiVoiceId")}
+                placeholder="voice_..."
+                className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui font-mono"
+              />
+              <p className="text-micro text-[var(--color-text-muted)] mt-1">{t("xaiVoiceIdOverrideHint")}</p>
+            </div>
+          )}
 
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -246,7 +269,7 @@ export function PresentationGenerator() {
         >
           {create.isPending ? t("queueing") : t("generateAudio")}
         </button>
-        <EstimatedCost providerId={providerId} minutes={estimatedMinutes || 0} />
+        <EstimatedCost providerId={providerId} minutes={estimatedMinutes} />
       </div>
     </form>
   )

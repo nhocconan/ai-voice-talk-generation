@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, type ReactNode } from "react"
 import { trpc } from "@/lib/trpc/client"
 import { cn } from "@/lib/utils"
 import { MicIcon } from "lucide-react"
@@ -12,20 +13,35 @@ interface Props {
   placeholder?: string
   required?: boolean
   exclude?: string[]
+  requireProviderVoiceId?: string | undefined
+  emptyMessage?: ReactNode | undefined
 }
 
-export function ProfileSelector({ selected, onSelect, value, onChange, exclude = [] }: Props) {
+export function ProfileSelector({ selected, onSelect, value, onChange, exclude = [], requireProviderVoiceId, emptyMessage }: Props) {
   const { data: profiles, isLoading } = trpc.voiceProfile.list.useQuery()
   const currentValue = selected ?? value ?? ""
   const handleSelect = onSelect ?? onChange ?? (() => undefined)
-  const available = profiles?.filter((p) => !exclude.includes(p.id)) ?? []
+  const available = profiles?.filter((p) => {
+    if (exclude.includes(p.id)) return false
+    if (!requireProviderVoiceId) return true
+
+    const providerVoiceIds = (p.providerVoiceIds ?? {}) as Record<string, unknown>
+    const voiceId = providerVoiceIds[requireProviderVoiceId]
+    return typeof voiceId === "string" && voiceId.trim().length > 0
+  }) ?? []
+
+  useEffect(() => {
+    if (!isLoading && currentValue && !available.some((profile) => profile.id === currentValue)) {
+      handleSelect("")
+    }
+  }, [available, currentValue, handleSelect, isLoading])
 
   if (isLoading) return <div className="h-12 bg-[var(--color-surface-1)] animate-pulse rounded-[var(--radius-md)]" />
 
   if (!available.length) {
     return (
       <p className="text-caption text-[var(--color-danger)]">
-        No voice profiles available. <a href="/voices/new" className="underline">Create one first.</a>
+        {emptyMessage ?? <>No voice profiles available. <a href="/voices/new" className="underline">Create one first.</a></>}
       </p>
     )
   }
@@ -53,6 +69,7 @@ export function ProfileSelector({ selected, onSelect, value, onChange, exclude =
               <div className="text-small truncate">{p.name}</div>
               <div className="text-micro text-[var(--color-text-muted)]">
                 {p.lang.toUpperCase()} {latestScore !== undefined ? `· ${latestScore}/100` : ""}
+                {requireProviderVoiceId ? " · xAI Voice ID" : ""}
               </div>
             </div>
             {currentValue === p.id && <div className="w-2 h-2 rounded-full bg-[var(--color-emphasis)] shrink-0" />}

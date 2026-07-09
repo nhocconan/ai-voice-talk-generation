@@ -165,6 +165,14 @@ const CURATED: Partial<Record<ProviderName, CatalogModel[]>> = {
       languages: ["en", "zh"],
     },
   ],
+  MINIMAX_TTS: [
+    { modelId: "speech-2.6-hd", displayName: "MiniMax Speech 2.6 HD", kind: "TTS", languages: ["vi", "en", "zh", "ja", "ko"] },
+    { modelId: "speech-2.6-turbo", displayName: "MiniMax Speech 2.6 Turbo", kind: "TTS", languages: ["vi", "en", "zh", "ja", "ko"] },
+    { modelId: "speech-2.8-hd", displayName: "MiniMax Speech 2.8 HD", kind: "TTS", languages: ["vi", "en", "zh", "ja", "ko"] },
+    { modelId: "speech-2.8-turbo", displayName: "MiniMax Speech 2.8 Turbo", kind: "TTS", languages: ["vi", "en", "zh", "ja", "ko"] },
+    { modelId: "speech-02-hd", displayName: "MiniMax Speech 02 HD", kind: "TTS", languages: ["vi", "en", "zh", "ja", "ko"] },
+    { modelId: "speech-02-turbo", displayName: "MiniMax Speech 02 Turbo", kind: "TTS", languages: ["vi", "en", "zh", "ja", "ko"] },
+  ],
   GEMINI_LLM: [
     { modelId: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash", kind: "LLM", languages: ["vi", "en"] },
     { modelId: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro", kind: "LLM", languages: ["vi", "en"] },

@@ -16,6 +16,8 @@ export function RevoiceGenerator() {
   const [uploading, setUploading] = useState(false)
   const [profileAId, setProfileAId] = useState("")
   const [profileBId, setProfileBId] = useState("")
+  const [xaiVoiceAId, setXaiVoiceAId] = useState("")
+  const [xaiVoiceBId, setXaiVoiceBId] = useState("")
   const [providerId, setProviderId] = useState("")
   const [script, setScript] = useState("")
   const [parseError, setParseError] = useState<string | null>(null)
@@ -23,6 +25,7 @@ export function RevoiceGenerator() {
   const fileRef = useRef<HTMLInputElement>(null)
 
   const uploadMutation = trpc.generation.requestSourceUploadUrl.useMutation()
+  const { data: ttsProviders } = trpc.generation.listAvailableProviders.useQuery()
   const revoiceMutation = trpc.generation.submitRevoice.useMutation({
     onSuccess: (data) => setGenerationId(data.generationId),
   })
@@ -37,6 +40,10 @@ export function RevoiceGenerator() {
       return 0.5
     }
   }, [script])
+  const selectedTtsProvider =
+    (providerId ? ttsProviders?.find((provider) => provider.id === providerId) : ttsProviders?.find((provider) => provider.isDefault)) ??
+    ttsProviders?.[0]
+  const requiresXaiVoiceId = selectedTtsProvider?.name === "XAI_TTS"
 
   async function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
@@ -75,6 +82,7 @@ export function RevoiceGenerator() {
         .map((label) => ({
           label,
           profileId: label === "A" ? profileAId : (profileBId || profileAId),
+          xaiVoiceId: label === "A" ? xaiVoiceAId.trim() || undefined : xaiVoiceBId.trim() || xaiVoiceAId.trim() || undefined,
           segments: segments
             .filter((segment) => segment.label === label)
             .map(({ startMs, endMs, text }) => ({ startMs, endMs, text })),
@@ -126,11 +134,43 @@ export function RevoiceGenerator() {
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-5 space-y-4">
           <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">2. {t("speakerA")}</h2>
-          <ProfileSelector value={profileAId} onChange={setProfileAId} />
+          <ProfileSelector
+            value={profileAId}
+            onChange={setProfileAId}
+          />
+          {requiresXaiVoiceId && (
+            <div>
+              <label htmlFor="revoice-xai-voice-a" className="mt-3 block text-xs text-[var(--color-text-secondary)]">{t("xaiVoiceIdSpeakerA")}</label>
+              <input
+                id="revoice-xai-voice-a"
+                value={xaiVoiceAId}
+                onChange={(event) => setXaiVoiceAId(event.target.value)}
+                placeholder="voice_..."
+                className="mt-1 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] px-3 py-2 text-sm font-mono"
+              />
+              <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">{t("xaiVoiceIdOverrideHint")}</p>
+            </div>
+          )}
         </div>
         <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-5 space-y-4">
           <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">3. {t("speakerB")}</h2>
-          <ProfileSelector value={profileBId} onChange={setProfileBId} />
+          <ProfileSelector
+            value={profileBId}
+            onChange={setProfileBId}
+          />
+          {requiresXaiVoiceId && (
+            <div>
+              <label htmlFor="revoice-xai-voice-b" className="mt-3 block text-xs text-[var(--color-text-secondary)]">{t("xaiVoiceIdSpeakerB")}</label>
+              <input
+                id="revoice-xai-voice-b"
+                value={xaiVoiceBId}
+                onChange={(event) => setXaiVoiceBId(event.target.value)}
+                placeholder="voice_..."
+                className="mt-1 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] px-3 py-2 text-sm font-mono"
+              />
+              <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">{t("xaiVoiceIdOverrideHint")}</p>
+            </div>
+          )}
         </div>
       </div>
 

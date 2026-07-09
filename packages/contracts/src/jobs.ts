@@ -31,6 +31,7 @@ export interface RenderJobSpeaker {
   profileId: string;
   segments: RenderJobSegment[];
   script?: string;
+  xaiVoiceId?: string | undefined;
 }
 
 export interface RenderJobSegment {

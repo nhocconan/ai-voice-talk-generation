@@ -61,6 +61,13 @@ async def run_video_revoice(
         voice_refs: dict[str, VoiceRef] = {}
         for spk in speakers:
             label = spk["label"]
+            pinned_voice_id = str(spk.get("provider_voice_id") or "").strip()
+            if pinned_voice_id:
+                voice_refs[label] = VoiceRef(
+                    provider_name=provider.name, data={"voice_id": pinned_voice_id}
+                )
+                logger.info("Using pinned provider voice", label=label, voice_id=pinned_voice_id)
+                continue
             sample_paths: list[Path] = []
             for key in spk.get("sample_keys", []):
                 dest = tmp_dir / f"ref_{label}_{Path(key).name}"

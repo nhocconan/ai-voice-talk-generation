@@ -38,6 +38,8 @@ export function GenerationDetail({ generationId }: { generationId: string }) {
     )
   }
 
+  const previewUrl = downloads?.mp3Url ?? downloads?.wavUrl ?? null
+
   return (
     <div
       className="space-y-6 rounded-[var(--radius-card)] bg-[var(--color-surface-0)] p-6"
@@ -83,6 +85,13 @@ export function GenerationDetail({ generationId }: { generationId: string }) {
           <pre className="mt-2 max-h-96 overflow-auto rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] p-4 text-caption whitespace-pre-wrap">
             {generation.inputScript}
           </pre>
+        </div>
+      ) : null}
+
+      {previewUrl ? (
+        <div className="space-y-2">
+          <p className="text-caption text-[var(--color-text-muted)]">{t("preview")}</p>
+          <audio controls preload="none" src={previewUrl} className="w-full" />
         </div>
       ) : null}
 

@@ -9,9 +9,11 @@ import { getProviderRate } from "@/lib/provider-pricing"
  * approximate $/min rate and shows the estimated spend for `minutes`. Local
  * providers show "free". Renders nothing if the provider has no known rate.
  */
-export function EstimatedCost({ providerId, minutes }: { providerId?: string | undefined; minutes: number }) {
+export function EstimatedCost({ providerId, minutes }: { providerId?: string | number | undefined; minutes: number }) {
   const t = useTranslations("generate")
   const { data } = trpc.generation.listAvailableProviders.useQuery()
+  const normalizedMinutes = typeof minutes === "number" ? minutes : Number(minutes)
+  const safeMinutes = Number.isFinite(normalizedMinutes) && normalizedMinutes > 0 ? normalizedMinutes : 0
 
   const provider = providerId
     ? data?.find((p) => p.id === providerId)
@@ -19,7 +21,7 @@ export function EstimatedCost({ providerId, minutes }: { providerId?: string | u
   const rate = provider ? getProviderRate(provider.name) : null
   if (!rate) return null
 
-  const cost = rate.costPerMinuteUsd * minutes
+  const cost = rate.costPerMinuteUsd * safeMinutes
   const costStr = cost < 0.1 ? cost.toFixed(3) : cost.toFixed(2)
 
   return (
@@ -31,7 +33,7 @@ export function EstimatedCost({ providerId, minutes }: { providerId?: string | u
       {!rate.isLocal && (
         <span>
           {" "}
-          · {minutes.toFixed(1)} {t("minShort")} × ${rate.costPerMinuteUsd.toFixed(3)}
+          · {safeMinutes.toFixed(1)} {t("minShort")} × ${rate.costPerMinuteUsd.toFixed(3)}
         </span>
       )}
     </p>

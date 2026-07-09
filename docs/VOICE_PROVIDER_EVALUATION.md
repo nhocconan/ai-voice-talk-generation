@@ -271,6 +271,18 @@ If the deployment target is a Mac with `16GB` memory:
 3. Keep `ElevenLabs` only as a paid fallback
 4. Use `Gemini TTS` only where cloning is not required
 
+## Update — July 2026: MiniMax promoted to primary cloud cloning lane
+
+Field experience since April changed the picture:
+
+- Production moved to a shared CPU-only Linux host, not the Mac Mini the local-first plan assumed. `VieNeu-TTS` stays as the free experimental lane only.
+- `xAI Grok TTS` custom voices turned out to be Enterprise-gated at the API (`403 Custom voices are not enabled for this team`); buying credits does not unlock `POST /v1/custom-voices`. Kept only as a `customVoiceId` pass-through lane.
+- `MiniMax Speech` (flagged in April as the cheapest serious cloud-cloning option) is now integrated as the `MINIMAX_TTS` provider: rapid clone from a 10 s–5 min reference (~$1.5 one-time per voice, charged on first use), `speech-2.6-hd` synthesis at $100/1M chars (~$2–3 per 30-minute Vietnamese render), prepaid credit with no subscription — the right shape for infrequent generation. Caveat: MiniMax deletes clones unused for 7 days; the worker derives the voice_id from the reference-clip hash and re-clones automatically.
+- `Fish Audio` (S2.1 Pro, $15/1M UTF-8 bytes, 83 languages incl. Vietnamese) noted as the ultra-cheap alternative if MiniMax quality disappoints.
+
+**Current recommendation (July 2026): MiniMax Speech as default provider; ElevenLabs as premium fallback; VieNeu-TTS as free local experiment lane.**
+
 ## Changelog
 
 - 2026-04-20: Initial evaluation memo recorded in the repo.
+- 2026-07-08: MiniMax Speech integrated and promoted to primary cloud voice-cloning lane; xAI demoted to customVoiceId pass-through.

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { UploadCloudIcon, CheckCircleIcon, XCircleIcon } from "lucide-react"
 import { useTranslations } from "next-intl"
 import { trpc } from "@/lib/trpc/client"
@@ -12,13 +12,14 @@ interface Props {
   onComplete: () => void
 }
 
-const ALLOWED_TYPES = ["audio/mpeg", "audio/mp4", "audio/x-m4a", "audio/wav", "audio/flac", "audio/ogg"]
+const ALLOWED_TYPES = ["audio/mpeg", "audio/mp4", "audio/x-m4a", "audio/wav", "audio/flac", "audio/ogg", "audio/webm"]
 const MAX_SIZE = 100 * 1024 * 1024
 
 interface FileEntry {
   file: File
   status: "pending" | "uploading" | "done" | "error"
   progress: number
+  url?: string | undefined
   error?: string | undefined
   canRetry?: boolean | undefined
 }
@@ -27,9 +28,16 @@ export function AudioUploader({ profileId, onComplete }: Props) {
   const t = useTranslations("voices")
   const [files, setFiles] = useState<FileEntry[]>([])
   const [dragging, setDragging] = useState(false)
+  const objectUrlsRef = useRef<string[]>([])
 
   const requestUploadUrl = trpc.voiceProfile.requestUploadUrl.useMutation()
   const submitSample = trpc.voiceProfile.submitSample.useMutation()
+
+  useEffect(() => {
+    return () => {
+      objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
+    }
+  }, [])
 
   const addFiles = useCallback((incoming: File[]) => {
     const nextEntries = incoming.map((file) => {
@@ -50,7 +58,9 @@ export function AudioUploader({ profileId, onComplete }: Props) {
         }
       }
 
-      return { file, status: "pending" as const, progress: 0 }
+      const url = URL.createObjectURL(file)
+      objectUrlsRef.current.push(url)
+      return { file, status: "pending" as const, progress: 0, url }
     })
 
     setFiles((prev) => [...prev, ...nextEntries])
@@ -102,6 +112,10 @@ export function AudioUploader({ profileId, onComplete }: Props) {
 
   return (
     <div className="space-y-5">
+      <div className="rounded-[var(--radius-md)] bg-[var(--color-surface-1)] p-4">
+        <p className="text-caption text-[var(--color-text-secondary)]">{t("uploadRecordingGuidance")}</p>
+      </div>
+
       {/* Drop zone */}
       <div
         onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
@@ -128,27 +142,33 @@ export function AudioUploader({ profileId, onComplete }: Props) {
       {/* File list */}
       {files.length > 0 && (
         <div className="space-y-2">
+          <h3 className="text-caption text-[var(--color-text-secondary)]">{t("selectedFilesTitle")}</h3>
           {files.map((entry, i) => (
             <div
               key={i}
-              className="flex items-center gap-3 p-3 rounded-[var(--radius-md)] bg-[var(--color-surface-1)]"
+              className="space-y-3 p-3 rounded-[var(--radius-md)] bg-[var(--color-surface-1)]"
             >
-              <div className="flex-1 min-w-0">
-                <p className="text-small truncate">{entry.file.name}</p>
-                <p className="text-micro text-[var(--color-text-muted)]">{formatFileSize(entry.file.size)}</p>
+              <div className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-small truncate">{entry.file.name}</p>
+                  <p className="text-micro text-[var(--color-text-muted)]">{formatFileSize(entry.file.size)}</p>
+                </div>
+                {entry.status === "done" && <CheckCircleIcon size={16} style={{ color: "var(--color-success)" }} />}
+                {entry.status === "error" && <XCircleIcon size={16} style={{ color: "var(--color-danger)" }} />}
+                {entry.status === "uploading" && <span className="text-micro text-[var(--color-text-muted)] animate-pulse">{entry.progress}%</span>}
+                {entry.error && <span className="text-micro text-[var(--color-danger)]">{entry.error}</span>}
+                {entry.canRetry && (
+                  <button
+                    type="button"
+                    onClick={() => retry(entry)}
+                    className="text-micro cursor-pointer rounded-[var(--radius-pill)] border border-[var(--color-border)] px-2.5 py-1 hover:bg-[var(--color-surface-0)] transition-colors"
+                  >
+                    {t("retry")}
+                  </button>
+                )}
               </div>
-              {entry.status === "done" && <CheckCircleIcon size={16} style={{ color: "var(--color-success)" }} />}
-              {entry.status === "error" && <XCircleIcon size={16} style={{ color: "var(--color-danger)" }} />}
-              {entry.status === "uploading" && <span className="text-micro text-[var(--color-text-muted)] animate-pulse">{entry.progress}%</span>}
-              {entry.error && <span className="text-micro text-[var(--color-danger)]">{entry.error}</span>}
-              {entry.canRetry && (
-                <button
-                  type="button"
-                  onClick={() => retry(entry)}
-                  className="text-micro rounded-[var(--radius-pill)] border border-[var(--color-border)] px-2.5 py-1 hover:bg-[var(--color-surface-0)] transition-colors"
-                >
-                  {t("retry")}
-                </button>
+              {entry.url && (
+                <audio controls src={entry.url} className="w-full h-10" />
               )}
             </div>
           ))}
@@ -158,7 +178,7 @@ export function AudioUploader({ profileId, onComplete }: Props) {
       {files.some((f) => f.status === "pending") && (
         <button
           onClick={uploadAll}
-          className="h-10 px-6 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button hover:opacity-90 transition-opacity"
+          className="h-10 cursor-pointer px-6 rounded-[var(--radius-pill)] bg-[var(--color-btn-primary-bg)] text-[var(--color-btn-primary-fg)] text-button hover:opacity-90 transition-opacity"
         >
           {t("uploadCount", { count: files.filter((f) => f.status === "pending").length })}
         </button>

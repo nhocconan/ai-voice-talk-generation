@@ -154,6 +154,25 @@ async function main() {
     },
   })
 
+  await prisma.providerConfig.upsert({
+    where: { name: ProviderName.MINIMAX_TTS },
+    update: {},
+    create: {
+      name: ProviderName.MINIMAX_TTS,
+      enabled: false,
+      isDefault: false,
+      config: {
+        model: "speech-2.6-hd",
+        voice: "Wise_Woman",
+        format: "mp3",
+        sampleRate: 32000,
+        bitRate: 128000,
+        noiseReduction: false,
+        maxChunkChars: 3000,
+      },
+    },
+  })
+
   // LLM providers (script drafting)
   await prisma.providerConfig.upsert({
     where: { name: ProviderName.GEMINI_LLM },

@@ -6,12 +6,13 @@ import { type NextRequest } from "next/server"
 import { z } from "zod"
 import { db } from "@/server/db/client"
 import { apiError, apiOk, mapTrpcError, requireWrite, isAuthError } from "@/server/api/rest"
-import { assertProfilesReady, resolveProvider } from "@/server/routers/generation"
+import { assertProfilesReady, assertXaiVoiceInputs, resolveProvider } from "@/server/routers/generation"
 
 const bodySchema = z.object({
   profileId: z.string().min(1),
   script: z.string().min(10),
   providerId: z.string().optional(),
+  xaiVoiceId: z.string().trim().max(200).optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -28,14 +29,15 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return apiError(400, "VALIDATION", parsed.error.issues[0]?.message ?? "Validation error")
 
   try {
-    await assertProfilesReady(db, [parsed.data.profileId])
     const providerId = await resolveProvider({ db }, parsed.data.providerId)
+    await assertProfilesReady(db, [parsed.data.profileId], providerId)
+    await assertXaiVoiceInputs(db, providerId, [parsed.data.xaiVoiceId])
 
     const workerUrl = process.env["WORKER_URL"] ?? "http://localhost:8001"
     const resp = await fetch(`${workerUrl}/preview`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider_id: providerId, profile_id: parsed.data.profileId, script: parsed.data.script, max_chars: 250 }),
+      body: JSON.stringify({ provider_id: providerId, profile_id: parsed.data.profileId, script: parsed.data.script, xai_voice_id: parsed.data.xaiVoiceId, max_chars: 250 }),
     })
     if (!resp.ok) {
       const err = (await resp.json().catch(() => ({ error: "Worker error" }))) as { error?: string }

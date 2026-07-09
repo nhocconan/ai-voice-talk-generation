@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server"
 import type { Prisma } from "@prisma/client"
 import { router, protectedProcedure, adminProcedure } from "@/server/trpc"
 import { generatePresignedPutUrl, generatePresignedGetUrl } from "@/server/services/storage"
-import { enqueueIngestJob } from "@/server/queue/producers"
+import { allocateVoiceSampleVersion, enqueueIngestJob } from "@/server/queue/producers"
 import crypto from "crypto"
 
 export const ALLOWED_AUDIO_MIMES = ["audio/mpeg", "audio/mp4", "audio/x-m4a", "audio/wav", "audio/flac", "audio/ogg", "audio/webm"]
@@ -75,6 +75,56 @@ export const voiceProfileRouter = router({
       return profile
     }),
 
+  update: protectedProcedure
+    .input(z.object({
+      id: z.string(),
+      name: z.string().min(1).max(100),
+      lang: z.enum(["vi", "en", "multi"]),
+      // xAI custom voice_id created in console.x.ai — empty string clears it.
+      xaiVoiceId: z.string().trim().max(200).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const profile = await ctx.db.voiceProfile.findUniqueOrThrow({ where: { id: input.id } })
+      const role = ctx.session.user.role as string
+      const isAdmin = role === "ADMIN" || role === "SUPER_ADMIN"
+
+      if (profile.ownerId !== ctx.session.user.id && !isAdmin) {
+        throw new TRPCError({ code: "FORBIDDEN" })
+      }
+      if (profile.isLocked && !isAdmin) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Profile is locked — contact admin to edit" })
+      }
+
+      let providerVoiceIds: Record<string, string> | undefined
+      if (input.xaiVoiceId !== undefined) {
+        providerVoiceIds = {
+          ...(profile.providerVoiceIds as Record<string, string> | null ?? {}),
+        }
+        if (input.xaiVoiceId) providerVoiceIds["XAI_TTS"] = input.xaiVoiceId
+        else delete providerVoiceIds["XAI_TTS"]
+      }
+
+      const updated = await ctx.db.voiceProfile.update({
+        where: { id: input.id },
+        data: {
+          name: input.name,
+          lang: input.lang,
+          ...(providerVoiceIds !== undefined ? { providerVoiceIds } : {}),
+        },
+      })
+
+      await ctx.audit({
+        actorId: ctx.session.user.id,
+        action: "voiceProfile.update",
+        targetType: "VoiceProfile",
+        targetId: input.id,
+        meta: { name: input.name, lang: input.lang, xaiVoiceId: input.xaiVoiceId },
+        ip: ctx.ip,
+      })
+
+      return updated
+    }),
+
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -142,7 +192,7 @@ export const voiceProfileRouter = router({
         orderBy: { version: "desc" },
         select: { version: true },
       })
-      const nextVersion = (latestSample?.version ?? 0) + 1
+      const nextVersion = await allocateVoiceSampleVersion(input.profileId, latestSample?.version ?? 0)
 
       await enqueueIngestJob({
         profileId: input.profileId,

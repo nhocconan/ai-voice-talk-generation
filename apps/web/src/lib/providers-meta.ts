@@ -47,7 +47,7 @@ export const PROVIDER_META: Record<string, ProviderMeta> = {
   VIENEU_TTS: {
     name: "VieNeu-TTS",
     shortName: "VieNeu",
-    tagline: "Vietnamese-first local TTS with instant voice cloning, GGUF/Turbo options, and Apple Silicon-friendly workflows.",
+    tagline: "FREE unlimited Vietnamese cloning lane — runs on this server's CPU (no API cost, no per-voice fee). Approximate clone quality: perfect for screening many voices before pinning a cloud voice.",
     needsApiKey: false,
     docsLinks: [
       { label: "GitHub", url: "https://github.com/pnnbao97/VieNeu-TTS" },
@@ -64,18 +64,16 @@ export const PROVIDER_META: Record<string, ProviderMeta> = {
       languages: ["vi", "en"],
     },
     setupSteps: [
-      "On Apple Silicon or CPU-only hosts, install the VieNeu SDK in the worker: `cd apps/worker && uv sync --extra vieneu`.",
-      "For best Mac ergonomics, start with `mode=local`, `device=mps`, and the default `pnnbao-ump/VieNeu-TTS` model. This keeps cloning and synthesis inside the worker.",
-      "If you want the higher-quality remote server path, start a VieNeu server separately and set `mode=remote` plus `apiBase` in the config form below.",
-      "Upload a clean 3–10 second reference clip per profile. VieNeu works best with a single speaker, little room noise, and no music bed.",
-      "Click Save config, then Test. A green test means the worker could import the SDK and initialize the configured runtime.",
-      "Enable the provider only after the test passes. Set it as default if this machine is your main Vietnamese local inference host.",
+      "No key needed — the SDK ships in the production worker image (built with `--extra vieneu`). Click Test: green means the runtime loaded.",
+      "Enable the provider. Voice profiles clone automatically from their uploaded samples on every render — nothing else to configure.",
+      "Use this lane to screen many people's voices for $0: enroll a profile, render a short script, listen. Expect roughly 5–15 s per sentence on CPU, so keep screening scripts short.",
+      "Clone quality is approximate (regional accent/timbre may drift). Once a voice passes screening, pin an xAI Console voice_id on the profile for production-quality renders.",
+      "Optional: for a faster dedicated host, run a VieNeu server elsewhere and set `mode=remote` plus `apiBase` in the config form below.",
     ],
     helpsWith: [
-      "Local Vietnamese presentation generation on Mac Mini / MacBook Pro",
-      "Low-cost 20–60 minute talk rendering with chunked synthesis",
-      "Offline voice cloning from short user reference samples",
-      "Fast iteration for MVP without cloud API spend",
+      "FREE unlimited screening of candidate voices — no per-voice or per-character cost",
+      "Vietnamese-first local cloning directly from enrolled profile samples",
+      "Low-cost 20–60 minute talk rendering with chunked synthesis (slow but free on CPU)",
     ],
     defaultConfig: {
       model: "pnnbao-ump/VieNeu-TTS",
@@ -579,12 +577,11 @@ export const PROVIDER_META: Record<string, ProviderMeta> = {
   XAI_TTS: {
     name: "xAI Grok TTS",
     shortName: "Grok",
-    tagline: "Grok TTS with custom voices — clone a voice from up to 120 s of audio and reuse the voice_id across REST and WebSocket TTS.",
+    tagline: "Low-cost xAI render lane. Set a default Voice ID here, then override per speaker on each generate form when needed.",
     needsApiKey: true,
     docsLinks: [
       { label: "API Console", url: "https://console.x.ai" },
       { label: "TTS Docs", url: "https://docs.x.ai/developers/model-capabilities/audio/text-to-speech" },
-      { label: "Custom Voices", url: "https://docs.x.ai/developers/model-capabilities/audio/custom-voices" },
     ],
     supports: {
       tts: true,
@@ -596,37 +593,31 @@ export const PROVIDER_META: Record<string, ProviderMeta> = {
       languages: ["en", "vi", "zh", "fr", "de", "ja", "ko", "ru", "tr", "it", "id", "hi", "bn"],
     },
     setupSteps: [
-      "Generate an xAI API key from console.x.ai (Enterprise plan required for /custom-voices).",
-      "Paste the key below and use Test & Save — the worker pings GET /v1/tts/voices to confirm.",
-      "Pick a default built-in voice (eve, ara, leo, rex, sal) used when no clone sample is supplied.",
-      "Cloning is one-shot: when a profile is rendered the first time the reference clip is uploaded to /custom-voices and the returned voice_id is reused.",
+      "Generate an xAI API key at console.x.ai → API Keys, paste it below, and click Test & Save — the worker pings GET /v1/tts/voices to confirm.",
+      "Create or choose the voice in xAI, then copy its Voice ID.",
+      "Paste the default Voice ID in the provider configuration below. This voice is used whenever a generate form leaves the xAI Voice ID field blank.",
+      "When xAI is selected for generation, each speaker can override the default with its own xAI Voice ID. Recorded profile samples are ignored for xAI.",
     ],
     helpsWith: [
-      "High-quality voice cloning from a short reference (90+ s recommended)",
+      "Default xAI voice with per-speaker generate-time overrides",
+      "Cheapest cloud render lane: ~$4.2/1M chars ≈ $0.13 per 30-minute Vietnamese talk",
       "20-language multilingual narration with speech tag styling",
-      "Real-time streaming via WebSocket (REST is used here)",
     ],
     defaultConfig: {
-      voice: "eve",
       codec: "mp3",
       sampleRate: 24000,
       bitRate: 128000,
       textNormalization: false,
+      defaultVoiceId: "",
       maxChunkChars: 5000,
     },
     configFields: [
       {
-        key: "voice",
-        label: "Default Built-in Voice",
-        input: "select",
-        description: "Voice used when no clone sample is supplied.",
-        options: [
-          { value: "eve", label: "Eve" },
-          { value: "ara", label: "Ara" },
-          { value: "leo", label: "Leo" },
-          { value: "rex", label: "Rex" },
-          { value: "sal", label: "Sal" },
-        ],
+        key: "defaultVoiceId",
+        label: "Default xAI Voice ID",
+        input: "text",
+        description: "Fallback Voice ID used when a generate form leaves the per-speaker xAI Voice ID blank.",
+        placeholder: "voice_...",
       },
       {
         key: "codec",
@@ -664,6 +655,107 @@ export const PROVIDER_META: Record<string, ProviderMeta> = {
         label: "Chunk Size",
         input: "number",
         description: "Maximum characters per chunk (xAI hard cap is 15,000).",
+      },
+    ],
+  },
+  MINIMAX_TTS: {
+    name: "MiniMax Speech",
+    shortName: "MiniMax",
+    tagline:
+      "Pay-as-you-go rapid voice cloning with first-class Vietnamese — clone from a 10 s–5 min reference, then render with Speech 2.6/2.8 HD.",
+    needsApiKey: true,
+    docsLinks: [
+      { label: "API Console", url: "https://platform.minimax.io" },
+      { label: "Voice Clone Guide", url: "https://platform.minimax.io/docs/guides/speech-voice-clone" },
+      { label: "T2A API", url: "https://platform.minimax.io/docs/api-reference/speech-t2a-http" },
+      { label: "Pricing", url: "https://platform.minimax.io/docs/guides/pricing-speech" },
+    ],
+    supports: {
+      tts: true,
+      voiceCloning: true,
+      asr: false,
+      diarization: false,
+      streaming: true,
+      styleConditioning: false,
+      languages: ["vi", "en", "zh", "ja", "ko", "fr", "de", "es", "pt", "ru", "it", "id", "th", "tr", "nl", "pl", "hi", "ar"],
+    },
+    setupSteps: [
+      "Create an account at platform.minimax.io, top up prepaid credit (no subscription needed), and create an API key under Account Management → API Keys.",
+      "Paste the key below and use Test & Save — the worker calls POST /v1/get_voice to confirm the key works.",
+      "Pick a model: speech-2.6-hd is the verified Vietnamese default; the turbo variants are ~40% cheaper for drafts.",
+      "Upload a clean 10 s–5 min reference clip to the voice profile. The worker clones it once (voice_id derived from the clip hash) and reuses the clone on later renders.",
+      "Billing: ~$1.5 one-time per cloned voice (charged on first use) + T2A characters. MiniMax deletes clones unused for 7 days — the worker re-clones automatically on the next render.",
+    ],
+    helpsWith: [
+      "Vietnamese voice cloning with no subscription — pay only per render",
+      "Long-form narration at roughly $2–3 per 30-minute HD generation",
+      "Emotion, speed, and pitch controls via provider config",
+    ],
+    defaultConfig: {
+      model: "speech-2.6-hd",
+      voice: "Wise_Woman",
+      format: "mp3",
+      sampleRate: 32000,
+      bitRate: 128000,
+      noiseReduction: false,
+      maxChunkChars: 3000,
+    },
+    configFields: [
+      {
+        key: "model",
+        label: "Model",
+        input: "select",
+        description: "T2A model used for synthesis. HD favors quality; Turbo favors cost and speed.",
+        options: [
+          { value: "speech-2.6-hd", label: "Speech 2.6 HD (Vietnamese verified)" },
+          { value: "speech-2.6-turbo", label: "Speech 2.6 Turbo" },
+          { value: "speech-2.8-hd", label: "Speech 2.8 HD (newest)" },
+          { value: "speech-2.8-turbo", label: "Speech 2.8 Turbo" },
+          { value: "speech-02-hd", label: "Speech 02 HD (legacy)" },
+          { value: "speech-02-turbo", label: "Speech 02 Turbo (legacy)" },
+        ],
+      },
+      {
+        key: "voice",
+        label: "Fallback System Voice",
+        input: "text",
+        description: "MiniMax system voice_id used only when no clone sample is supplied.",
+        placeholder: "Wise_Woman",
+      },
+      {
+        key: "format",
+        label: "Audio Format",
+        input: "select",
+        description: "Output codec returned by the API.",
+        options: [
+          { value: "mp3", label: "MP3" },
+          { value: "wav", label: "WAV" },
+          { value: "flac", label: "FLAC" },
+        ],
+      },
+      {
+        key: "sampleRate",
+        label: "Sample Rate",
+        input: "number",
+        description: "Output sample rate in Hz (8000–44100; 32000 recommended).",
+      },
+      {
+        key: "bitRate",
+        label: "Bit Rate",
+        input: "number",
+        description: "MP3 bit rate in bps (32000–256000).",
+      },
+      {
+        key: "noiseReduction",
+        label: "Clone Noise Reduction",
+        input: "boolean",
+        description: "Ask MiniMax to denoise the reference clip during cloning. Leave off — enrollment already normalizes samples.",
+      },
+      {
+        key: "maxChunkChars",
+        label: "Chunk Size",
+        input: "number",
+        description: "Maximum characters per chunk (MiniMax hard cap is 10,000).",
       },
     ],
   },
@@ -1118,20 +1210,18 @@ type DeepPartial<T> = {
 const PROVIDER_META_VI_OVERRIDES: Record<string, DeepPartial<ProviderMeta>> = {
   VIENEU_TTS: {
     tagline:
-      "TTS cục bộ ưu tiên tiếng Việt với nhân bản giọng tức thì, tùy chọn GGUF/Turbo, và quy trình thân thiện với Apple Silicon.",
+      "Lane clone tiếng Việt MIỄN PHÍ không giới hạn — chạy trên CPU của chính server này (không tốn phí API, không phí theo giọng). Chất lượng clone gần đúng: hợp nhất để sàng lọc nhiều giọng trước khi gắn giọng cloud.",
     setupSteps: [
-      "Trên máy Apple Silicon hoặc host chỉ có CPU, cài VieNeu SDK vào worker: `cd apps/worker && uv sync --extra vieneu`.",
-      "Để tối ưu trên Mac, hãy bắt đầu với `mode=local`, `device=mps`, và model mặc định `pnnbao-ump/VieNeu-TTS`. Cách này giữ toàn bộ việc nhân bản và tổng hợp bên trong worker.",
-      "Nếu muốn dùng đường server từ xa chất lượng cao hơn, hãy khởi động một VieNeu server riêng rồi đặt `mode=remote` cùng `apiBase` trong form cấu hình bên dưới.",
-      "Tải lên một clip tham chiếu sạch dài 3–10 giây cho mỗi hồ sơ. VieNeu hoạt động tốt nhất với một người nói duy nhất, ít tạp âm phòng, và không có nhạc nền.",
-      "Nhấn Save config, rồi Test. Test xanh nghĩa là worker đã import được SDK và khởi tạo được runtime đã cấu hình.",
-      "Chỉ bật provider sau khi test thành công. Đặt làm mặc định nếu máy này là host suy luận cục bộ tiếng Việt chính của bạn.",
+      "Không cần key — SDK đã có sẵn trong image worker production (build với `--extra vieneu`). Bấm Test: xanh nghĩa là runtime đã load.",
+      "Bật provider. Voice profile tự động clone từ mẫu đã tải lên ở mỗi lần render — không cần cấu hình gì thêm.",
+      "Dùng lane này để sàng lọc giọng của nhiều người với chi phí $0: enroll profile, render một kịch bản ngắn, nghe thử. Tốc độ khoảng 5–15 giây mỗi câu trên CPU, nên giữ kịch bản sàng lọc ngắn.",
+      "Chất lượng clone là gần đúng (chất giọng/vùng miền có thể lệch). Khi một giọng đã qua vòng sàng lọc, gắn voice_id từ xAI Console vào profile để render chất lượng production.",
+      "Tùy chọn: nếu muốn host riêng nhanh hơn, chạy một VieNeu server nơi khác rồi đặt `mode=remote` cùng `apiBase` trong form cấu hình bên dưới.",
     ],
     helpsWith: [
-      "Tạo bài thuyết trình tiếng Việt cục bộ trên Mac Mini / MacBook Pro",
-      "Render bài nói 20–60 phút chi phí thấp với tổng hợp theo từng đoạn",
-      "Nhân bản giọng ngoại tuyến từ mẫu tham chiếu ngắn của người dùng",
-      "Lặp nhanh cho MVP mà không tốn chi phí API cloud",
+      "Sàng lọc MIỄN PHÍ không giới hạn các giọng ứng viên — không phí theo giọng hay theo ký tự",
+      "Clone tiếng Việt cục bộ trực tiếp từ mẫu đã enroll của profile",
+      "Render bài nói 20–60 phút chi phí thấp với tổng hợp theo đoạn (chậm nhưng miễn phí trên CPU)",
     ],
     configFields: [
       {
@@ -1426,29 +1516,22 @@ const PROVIDER_META_VI_OVERRIDES: Record<string, DeepPartial<ProviderMeta>> = {
   },
   XAI_TTS: {
     tagline:
-      "Grok TTS với giọng tùy chỉnh — nhân bản giọng từ tối đa 120 giây audio và tái sử dụng voice_id qua REST và WebSocket TTS.",
+      "Lane render xAI chi phí thấp. Đặt Voice ID mặc định ở đây, rồi override theo từng speaker trên form tạo khi cần.",
     setupSteps: [
-      "Tạo một xAI API key từ console.x.ai (cần gói Enterprise cho /custom-voices).",
-      "Dán key bên dưới và dùng Test & Save — worker gọi GET /v1/tts/voices để xác nhận.",
-      "Chọn một giọng dựng sẵn mặc định (eve, ara, leo, rex, sal) dùng khi không cung cấp mẫu nhân bản.",
-      "Nhân bản là một lần: khi một hồ sơ được render lần đầu, clip tham chiếu được tải lên /custom-voices và voice_id trả về sẽ được tái sử dụng.",
+      "Tạo xAI API key tại console.x.ai → API Keys, dán vào bên dưới rồi bấm Test & Save — worker gọi GET /v1/tts/voices để xác nhận.",
+      "Tạo hoặc chọn giọng trong xAI, rồi copy Voice ID.",
+      "Dán Voice ID mặc định vào cấu hình provider bên dưới. Giọng này được dùng khi form tạo để trống xAI Voice ID.",
+      "Khi chọn xAI để tạo audio, mỗi speaker có thể override default bằng xAI Voice ID riêng. Mẫu ghi âm trong profile bị bỏ qua với xAI.",
     ],
     helpsWith: [
-      "Nhân bản giọng chất lượng cao từ clip tham chiếu ngắn (khuyến nghị 90+ giây)",
+      "Giọng xAI mặc định kèm override theo từng speaker lúc tạo",
+      "Lane render cloud rẻ nhất: ~$4.2/1M ký tự ≈ $0.13 cho bài nói tiếng Việt 30 phút",
       "Thuyết minh đa ngôn ngữ 20 thứ tiếng với tạo style bằng speech tag",
-      "Streaming thời gian thực qua WebSocket (ở đây dùng REST)",
     ],
     configFields: [
       {
-        label: "Giọng dựng sẵn mặc định",
-        description: "Giọng dùng khi không cung cấp mẫu nhân bản.",
-        options: [
-          { label: "Eve" },
-          { label: "Ara" },
-          { label: "Leo" },
-          { label: "Rex" },
-          { label: "Sal" },
-        ],
+        label: "xAI Voice ID mặc định",
+        description: "Voice ID fallback khi form tạo để trống xAI Voice ID theo speaker.",
       },
       {
         label: "Codec",
@@ -1476,6 +1559,65 @@ const PROVIDER_META_VI_OVERRIDES: Record<string, DeepPartial<ProviderMeta>> = {
       {
         label: "Kích thước đoạn",
         description: "Số ký tự tối đa mỗi đoạn (giới hạn cứng của xAI là 15.000).",
+      },
+    ],
+  },
+  MINIMAX_TTS: {
+    tagline:
+      "Nhân bản giọng nhanh, trả tiền theo lượt dùng, hỗ trợ tiếng Việt hạng nhất — clone từ clip tham chiếu 10 giây–5 phút, rồi render với Speech 2.6/2.8 HD.",
+    setupSteps: [
+      "Tạo tài khoản tại platform.minimax.io, nạp credit trả trước (không cần subscription), rồi tạo API key trong Account Management → API Keys.",
+      "Dán key bên dưới và dùng Test & Save — worker gọi POST /v1/get_voice để xác nhận key hoạt động.",
+      "Chọn model: speech-2.6-hd là mặc định đã kiểm chứng tiếng Việt; bản turbo rẻ hơn ~40% cho bản nháp.",
+      "Tải clip tham chiếu sạch 10 giây–5 phút vào voice profile. Worker clone một lần (voice_id sinh từ hash của clip) và tái sử dụng clone ở các lần render sau.",
+      "Chi phí: ~$1.5 một lần cho mỗi giọng clone (tính khi dùng lần đầu) + ký tự T2A. MiniMax xóa clone không dùng trong 7 ngày — worker tự clone lại ở lần render kế tiếp.",
+    ],
+    helpsWith: [
+      "Nhân bản giọng tiếng Việt không cần subscription — chỉ trả tiền theo lần render",
+      "Thuyết minh dài khoảng $2–3 cho mỗi bản HD 30 phút",
+      "Điều khiển cảm xúc, tốc độ và cao độ qua config provider",
+    ],
+    configFields: [
+      {
+        label: "Model",
+        description: "Model T2A dùng để tổng hợp. HD ưu tiên chất lượng; Turbo ưu tiên chi phí và tốc độ.",
+        options: [
+          { label: "Speech 2.6 HD (đã kiểm chứng tiếng Việt)" },
+          { label: "Speech 2.6 Turbo" },
+          { label: "Speech 2.8 HD (mới nhất)" },
+          { label: "Speech 2.8 Turbo" },
+          { label: "Speech 02 HD (cũ)" },
+          { label: "Speech 02 Turbo (cũ)" },
+        ],
+      },
+      {
+        label: "Giọng hệ thống dự phòng",
+        description: "voice_id giọng hệ thống MiniMax, chỉ dùng khi không có mẫu nhân bản.",
+      },
+      {
+        label: "Định dạng audio",
+        description: "Codec đầu ra mà API trả về.",
+        options: [
+          { label: "MP3" },
+          { label: "WAV" },
+          { label: "FLAC" },
+        ],
+      },
+      {
+        label: "Sample Rate",
+        description: "Sample rate đầu ra tính bằng Hz (8000–44100; khuyến nghị 32000).",
+      },
+      {
+        label: "Bit Rate",
+        description: "Bit rate MP3 tính bằng bps (32000–256000).",
+      },
+      {
+        label: "Khử nhiễu khi clone",
+        description: "Yêu cầu MiniMax khử nhiễu clip tham chiếu khi nhân bản. Nên tắt — bước enrollment đã chuẩn hóa mẫu.",
+      },
+      {
+        label: "Kích thước đoạn",
+        description: "Số ký tự tối đa mỗi đoạn (giới hạn cứng của MiniMax là 10.000).",
       },
     ],
   },
