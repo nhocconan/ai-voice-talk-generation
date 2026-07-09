@@ -8,6 +8,7 @@ This directory is the single source of truth for product, architecture, and deli
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | System architecture, data model, provider abstraction | Engineers |
 | [TECH_STACK.md](./TECH_STACK.md) | Chosen technologies + rationale + versions | Engineers |
 | [CODING_GUIDELINES.md](./CODING_GUIDELINES.md) | Best practices per language/framework | Engineers |
+| [ANTI_PATTERNS.md](./ANTI_PATTERNS.md) | Numbered bug-class rules + audit scripts (prod lint gate, …) | Engineers, agents |
 | [DEFINITION_OF_DONE.md](./DEFINITION_OF_DONE.md) | What "done" means for every task | All |
 | [TESTING_STRATEGY.md](./TESTING_STRATEGY.md) | Test pyramid, tooling, coverage expectations | Engineers |
 | [WORKFLOW.md](./WORKFLOW.md) | Task lifecycle: pick → build → test → review → mark done | All |

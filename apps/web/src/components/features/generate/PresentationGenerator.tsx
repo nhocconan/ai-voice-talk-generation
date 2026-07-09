@@ -109,11 +109,13 @@ export function PresentationGenerator() {
 
   const onSubmit = async (data: FormData) => {
     try {
+      const trimmedVoiceId = data.xaiVoiceId?.trim()
       const { generationId: id } = await create.mutateAsync({
         ...data,
         // Empty string from the select must not override the server default.
-        providerId: data.providerId || undefined,
-        xaiVoiceId: data.xaiVoiceId?.trim() || undefined,
+        providerId: data.providerId === "" ? undefined : data.providerId,
+        // Empty / whitespace-only voice override must not be sent.
+        xaiVoiceId: trimmedVoiceId !== undefined && trimmedVoiceId !== "" ? trimmedVoiceId : undefined,
       })
       setGenerationId(id)
     } catch {
@@ -372,7 +374,7 @@ export function PresentationGenerator() {
         <p className="text-body-ui text-[var(--color-danger)]">{create.error.message}</p>
       )}
 
-      {(errors.profileId || errors.script) && (
+      {(errors.profileId ?? errors.script) && (
         <p className="text-body-ui text-[var(--color-danger)]" role="alert">
           {errors.profileId?.message ?? errors.script?.message}
         </p>

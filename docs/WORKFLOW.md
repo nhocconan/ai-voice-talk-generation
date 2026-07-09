@@ -34,13 +34,15 @@ Each task in `TASKS.md` moves through these states (checkbox indicator in bracke
 
 ### Step 4 — Self-verify (before opening PR)
 Run locally, in this order:
-1. `pnpm verify` — lint + typecheck + unit tests.
-2. `pnpm test:integration` (or worker equivalent).
-3. Manual smoke on the flow you changed.
-4. If UI: open in browser at 375px + 1280px, keyboard-only walkthrough.
-5. Check your diff one more time. Remove stray `console.log`, commented code, unused imports.
+1. `pnpm audit:prod-lint` — ESLint on `apps/web/src` (same class of failure as production Docker `next build`; `ANTI_PATTERNS.md` §1).
+2. `pnpm verify` — includes §1 audit + full lint + typecheck + unit tests.
+3. `pnpm test:integration` (or worker equivalent).
+4. Manual smoke on the flow you changed.
+5. If UI: open in browser at 375px + 1280px, keyboard-only walkthrough.
+6. Check your diff one more time. Remove stray `console.log`, commented code, unused imports.
 
-If any step fails, fix before opening PR. **Do not ask reviewers to catch things you could have caught.**
+If any step fails, fix before opening PR. **Do not ask reviewers to catch things you could have caught.**  
+**Do not push to a host that only `docker compose pull && build` without this gate** — prod will die on ESLint the same way CI would.
 
 ### Step 5 — Open PR
 - Fill out the PR template (see `CODING_GUIDELINES.md §4.3`).
@@ -130,3 +132,4 @@ If a task seems bigger, split it **before** starting. A 5-day PR is a review nig
 
 ## Changelog
 - 2026-04-19: v1.0 initial workflow.
+- 2026-07-09: Self-verify step 1 = `pnpm audit:prod-lint` (ANTI_PATTERNS §1; Docker next build ESLint parity).

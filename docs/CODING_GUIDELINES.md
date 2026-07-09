@@ -49,7 +49,8 @@ src/
 
 ### 2.4 Rules
 - **No `any`.** Use `unknown` + narrow.
-- **No `as` casts** except to widen `unknown`. Narrow via Zod/`instanceof`.
+- **No `as` casts** except to widen `unknown`. Narrow via Zod/`instanceof`. **No redundant assertions** (`as T` when the expression is already `T`) — fails `@typescript-eslint/no-unnecessary-type-assertion` and **fails production `next build`** (see `ANTI_PATTERNS.md` §1).
+- **Nullish vs empty string.** Use `??` for null/undefined defaults. If `""` must become `undefined` (form selects, optional overrides), use an explicit empty check (`a === "" ? undefined : a`), not `a || undefined` when ESLint flags `prefer-nullish-coalescing`.
 - **No default exports** (easier refactors, consistent imports). Exception: Next.js pages/layouts (framework requires default).
 - **RSC by default.** Add `"use client"` only when the component uses browser APIs or hooks.
 - **Never fetch data in client components.** Pass from server or use tRPC client via hook.
@@ -57,6 +58,7 @@ src/
 - **Zod for every tRPC input.** No unchecked mutations.
 - **Errors as values for expected failures** (`Result<T>` type), exceptions for programmer errors only.
 - **Prefer `const` + arrow functions** for module-level code; `function` for top-level declarations when hoisting matters.
+- **Production build parity.** `infra/docker/web.Dockerfile` runs `next build`, which runs ESLint with this repo’s strict config. Lint errors are deploy blockers, not “warnings to clean later.” Gate: `pnpm audit:prod-lint`.
 
 ### 2.5 React
 - No `useEffect` for data fetching (use RSC or tRPC).
@@ -161,7 +163,7 @@ src/worker/
 
 ## Definition of Done checklist
 - [ ] Tests added/updated and passing
-- [ ] Types/lint green
+- [ ] Types/lint green (`pnpm audit:prod-lint` for web src — ANTI_PATTERNS §1)
 - [ ] Docs updated in same PR (if behavior changed)
 - [ ] Manual smoke done on relevant flow
 - [ ] No new secrets / no licensing regressions
@@ -226,3 +228,4 @@ src/worker/
 
 ## Changelog
 - 2026-04-19: v1.0 initial guidelines.
+- 2026-07-09: §2.4 — nullish/empty-string + no redundant assertions; production `next build` ESLint parity (`ANTI_PATTERNS.md` §1, `pnpm audit:prod-lint`).

@@ -9,6 +9,7 @@ Every task, regardless of type, must satisfy:
 - [ ] **D1. Code matches the task description.** No scope creep; no skipped acceptance criteria.
 - [ ] **D2. Types compile with zero errors.** (`tsc --noEmit` for TS; `mypy --strict` for Python.)
 - [ ] **D3. Lint is clean.** (`pnpm lint` for web; `ruff check` + `mypy` for worker.)
+- [ ] **D3a. Production web lint gate green.** (`pnpm audit:prod-lint` — same ESLint surface that fails Docker `next build`; see `ANTI_PATTERNS.md` §1.) Required for any change under `apps/web/src`.
 - [ ] **D4. Tests pass locally AND in CI.** Unit tests for new logic, integration test if it crosses a boundary (DB, queue, provider).
 - [ ] **D4a. Required GitHub Actions checks are green on the branch or PR before merge.** A local pass is not enough if CI is still red.
 - [ ] **D5. Coverage not regressed.** Project floor: 70% lines on changed files. New code ≥ 80%.
@@ -99,6 +100,7 @@ These are **not** valid reasons to mark a task done:
 - "Will add docs in a follow-up." → Same PR or not done.
 - "Works for English, will do Vietnamese later." → Not done for v1 scope (VI is primary).
 - "Passes lint with a pragma disable I added." → Remove the pragma or justify with ticket.
+- "Works in `next dev`, so production Docker will be fine." → **False.** Prod runs `next build` + ESLint; run `pnpm audit:prod-lint` (`ANTI_PATTERNS.md` §1).
 - "Reviewer didn't look at UI but approved." → Re-request review with explicit UI pointers.
 
 ## Signing off
@@ -127,3 +129,4 @@ model catalog, the standard DoD also requires:
 - 2026-04-19: v1.0 initial DoD.
 - 2026-04-20: Added mandatory green GitHub Actions checks and workflow/toolchain consistency checks before merge.
 - 2026-05-26: Added Mode A (audiogram) / Mode B (video re-voice) / model catalog addenda.
+- 2026-07-09: D3a production web lint gate (`pnpm audit:prod-lint`); trap for "works in next dev".

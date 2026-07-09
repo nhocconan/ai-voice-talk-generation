@@ -1,4 +1,22 @@
-# CLAUDE.md
+# AGENTS.md — Voice Studio
+
+Agent-facing project rules. Merge with behavioral guidelines below.
+
+## Project hard rules (read before shipping code)
+
+1. **Production lint gate (ANTI_PATTERNS §1).** Docker prod build runs `next build`, which **fails on ESLint errors**. `next dev` will not save you.
+   - After any change under `apps/web/src/**/*.{ts,tsx}`, run before claiming done:
+     `pnpm audit:prod-lint` (or `pnpm --filter web exec eslint src --max-warnings 0`).
+   - Prefer `??` for null/undefined defaults. If empty string must become missing, use explicit `=== ""` (or trim + empty) checks — do **not** use `|| undefined` when the strict rule flags it.
+   - Do not add redundant `as T` when the type is already `T`.
+   - Never “fix” prod build by turning off ESLint during builds.
+   - Full list + examples: `docs/ANTI_PATTERNS.md`.
+2. **Verify before “done”.** Nontrivial web changes: at least `pnpm audit:prod-lint` + typecheck on touched packages. Prefer `pnpm verify` before asking anyone to pull/build prod.
+3. **Surgical diffs only.** Touch only what the task requires. Project coding standards: `docs/CODING_GUIDELINES.md`. Definition of done: `docs/DEFINITION_OF_DONE.md`.
+
+---
+
+# Behavioral guidelines (Karpathy-style)
 
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 

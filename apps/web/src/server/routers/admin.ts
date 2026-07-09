@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { router, adminProcedure, superAdminProcedure } from "@/server/trpc"
-import { ModelKind, Prisma, ProviderName, Role } from "@prisma/client"
+import { ModelKind, Prisma, Role } from "@prisma/client"
 import { TRPCError } from "@trpc/server"
 import { encryptApiKey, decryptApiKey, normalizeApiKey } from "@/server/services/crypto"
 import { ensureCuratedModels, fetchProviderCatalog } from "@/server/services/provider-models"
@@ -188,7 +188,7 @@ export const adminRouter = router({
           rest.config !== undefined
             ? (data.config as Record<string, unknown> | undefined) ?? currentConfig
             : currentConfig
-        await ensureCuratedModels(ctx.db, id, existing.name as ProviderName, cfg)
+        await ensureCuratedModels(ctx.db, id, existing.name, cfg)
       }
 
       await ctx.audit({

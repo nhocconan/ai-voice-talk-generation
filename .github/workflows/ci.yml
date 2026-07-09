@@ -37,6 +37,9 @@ jobs:
           DATABASE_URL: postgresql://voice:voice@localhost:5432/voice_test
         run: pnpm dlx prisma generate
 
+      - name: Production web lint gate (ANTI_PATTERNS §1)
+        run: pnpm audit:prod-lint
+
       - name: Lint
         run: pnpm lint
 
