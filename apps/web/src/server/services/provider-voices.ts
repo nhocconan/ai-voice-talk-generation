@@ -42,21 +42,18 @@ export async function validateProviderVoiceId({ provider, apiKeyEnc, voiceId }: 
       if (statusCode === 0 && exists) return
     }
   } else {
-    response = await fetch("https://api.x.ai/v1/tts/voices", {
-      headers: { Authorization: `Bearer ${apiKey}` },
+    const headers = { Authorization: `Bearer ${apiKey}` }
+    response = await fetch(`https://api.x.ai/v1/custom-voices/${encodeURIComponent(id)}`, {
+      headers,
       signal: AbortSignal.timeout(15_000),
     })
-    if (response.ok) {
-      const payload = await response.json() as Record<string, unknown>
-      const voices = Array.isArray(payload["voices"])
-        ? payload["voices"]
-        : (Array.isArray(payload["data"]) ? payload["data"] : [])
-      const exists = voices.some((voice) => {
-        if (typeof voice === "string") return voice === id
-        return isRecord(voice) && (voice["voice_id"] === id || voice["id"] === id)
-      })
-      if (exists) return
-    }
+    if (response.ok) return
+
+    response = await fetch(`https://api.x.ai/v1/tts/voices/${encodeURIComponent(id)}`, {
+      headers,
+      signal: AbortSignal.timeout(15_000),
+    })
+    if (response.ok) return
   }
 
   throw new Error(`${provider} Voice ID is not available to the configured provider account.`)
