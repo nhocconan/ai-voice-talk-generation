@@ -281,18 +281,27 @@ async def _get_speaker_sample_keys(
         with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             result = []
             for spk in speakers:
+                if spk.get("keepOriginal") or spk.get("keep_original"):
+                    result.append({**spk, "sample_keys": [], "lang": "vi"})
+                    continue
+                profile_id = spk.get("profileId") or spk.get("profile_id")
+                if not profile_id:
+                    raise ValueError(f"Replacement speaker {spk.get('label')} has no profileId")
                 cur.execute(
                     """SELECT lang, "providerVoiceIds"
                        FROM voice_profiles
                        WHERE id=%s""",
-                    (spk["profileId"],),
+                    (profile_id,),
                 )
                 profile_row = cur.fetchone()
                 voice_ids = profile_row["providerVoiceIds"] if profile_row else {}
                 if isinstance(voice_ids, (str, bytes, bytearray)):
                     voice_ids = _json.loads(voice_ids)
-                payload_voice_id = str(spk.get("xaiVoiceId") or spk.get("xai_voice_id") or "").strip()
-                pinned = payload_voice_id if provider_name == "XAI_TTS" else ((voice_ids or {}).get(provider_name, "") if provider_name else "")
+                payload_voice_id = str(
+                    spk.get("xaiVoiceId") or spk.get("xai_voice_id") or ""
+                ).strip()
+                profile_voice_id = (voice_ids or {}).get(provider_name, "") if provider_name else ""
+                pinned = payload_voice_id or profile_voice_id
 
                 sample_rows = []
                 if provider_name != "XAI_TTS":
@@ -301,7 +310,7 @@ async def _get_speaker_sample_keys(
                            FROM voice_samples
                            WHERE "profileId"=%s
                            ORDER BY version ASC""",
-                        (spk["profileId"],),
+                        (profile_id,),
                     )
                     sample_rows = cur.fetchall()
                 result.append(
@@ -406,6 +415,7 @@ async def handle_render(job_name: str, data: object) -> None:
                 progress_fn=progress,
                 result_fn=_db_render_result,
                 audiogram_title=data.audiogram_title,
+                source_audio_key=data.source_audio_key,
             )
 
             RENDERS_TOTAL.labels(status="success", provider=provider_name).inc()

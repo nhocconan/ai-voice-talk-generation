@@ -1,10 +1,18 @@
 import { z } from "zod"
 import { TRPCError } from "@trpc/server"
-import type { Prisma } from "@prisma/client"
+import type { Prisma, PrismaClient } from "@prisma/client"
 import { router, protectedProcedure, adminProcedure } from "@/server/trpc"
 import { generatePresignedPutUrl, generatePresignedGetUrl } from "@/server/services/storage"
 import { allocateVoiceSampleVersion, enqueueIngestJob } from "@/server/queue/producers"
 import crypto from "crypto"
+import { ProviderName } from "@prisma/client"
+import { validateProviderVoiceId, type NativeVoiceProvider } from "@/server/services/provider-voices"
+
+const providerVoiceIdsSchema = z.object({
+  XAI_TTS: z.string().trim().max(200).optional(),
+  MINIMAX_TTS: z.string().trim().max(256).optional(),
+  ELEVENLABS: z.string().trim().max(200).optional(),
+}).partial()
 
 export const ALLOWED_AUDIO_MIMES = ["audio/mpeg", "audio/mp4", "audio/x-m4a", "audio/wav", "audio/flac", "audio/ogg", "audio/webm"]
 export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024
@@ -47,13 +55,16 @@ export const voiceProfileRouter = router({
       name: z.string().min(1).max(100),
       lang: z.enum(["vi", "en", "multi"]),
       consentText: z.string().min(10),
+      providerVoiceIds: providerVoiceIdsSchema.optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      const providerVoiceIds = await validateProviderVoiceIds(ctx.db, input.providerVoiceIds ?? {})
       const profile = await ctx.db.voiceProfile.create({
         data: {
           ownerId: ctx.session.user.id,
           name: input.name,
           lang: input.lang,
+          providerVoiceIds,
           consent: {
             signedAt: new Date().toISOString(),
             text: input.consentText,
@@ -82,6 +93,7 @@ export const voiceProfileRouter = router({
       lang: z.enum(["vi", "en", "multi"]),
       // xAI custom voice_id created in console.x.ai — empty string clears it.
       xaiVoiceId: z.string().trim().max(200).optional(),
+      providerVoiceIds: providerVoiceIdsSchema.optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const profile = await ctx.db.voiceProfile.findUniqueOrThrow({ where: { id: input.id } })
@@ -96,12 +108,16 @@ export const voiceProfileRouter = router({
       }
 
       let providerVoiceIds: Record<string, string> | undefined
-      if (input.xaiVoiceId !== undefined) {
-        providerVoiceIds = {
-          ...(profile.providerVoiceIds as Record<string, string> | null ?? {}),
+      const requestedVoiceIds = input.providerVoiceIds ?? (input.xaiVoiceId !== undefined ? { XAI_TTS: input.xaiVoiceId } : undefined)
+      if (requestedVoiceIds !== undefined) {
+        const validated = await validateProviderVoiceIds(ctx.db, requestedVoiceIds)
+        providerVoiceIds = { ...(profile.providerVoiceIds as Record<string, string> | null ?? {}) }
+        for (const [provider, voiceId] of Object.entries(requestedVoiceIds)) {
+          if (voiceId?.trim()) providerVoiceIds[provider] = validated[provider] ?? voiceId.trim()
+          else providerVoiceIds = Object.fromEntries(
+            Object.entries(providerVoiceIds).filter(([existingProvider]) => existingProvider !== provider),
+          )
         }
-        if (input.xaiVoiceId) providerVoiceIds["XAI_TTS"] = input.xaiVoiceId
-        else delete providerVoiceIds["XAI_TTS"]
       }
 
       const updated = await ctx.db.voiceProfile.update({
@@ -118,12 +134,16 @@ export const voiceProfileRouter = router({
         action: "voiceProfile.update",
         targetType: "VoiceProfile",
         targetId: input.id,
-        meta: { name: input.name, lang: input.lang, xaiVoiceId: input.xaiVoiceId },
+        meta: {
+          name: input.name,
+          lang: input.lang,
+          providerVoiceProviders: providerVoiceIds === undefined ? undefined : Object.keys(providerVoiceIds),
+        },
         ip: ctx.ip,
       })
 
       return updated
-    }),
+  }),
 
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
@@ -352,3 +372,36 @@ export const voiceProfileRouter = router({
       await ctx.audit({ actorId: ctx.session.user.id, action: "voiceProfile.setOrgShared", targetType: "VoiceProfile", targetId: input.id, meta: { shared: input.shared } })
     }),
 })
+
+async function validateProviderVoiceIds(
+  prisma: PrismaClient,
+  requested: Partial<Record<NativeVoiceProvider, string | undefined>>,
+): Promise<Record<string, string>> {
+  const entries = Object.entries(requested)
+    .filter((entry): entry is [NativeVoiceProvider, string] => entry[1] !== undefined && entry[1].trim() !== "")
+    .map(([provider, voiceId]) => [provider, voiceId.trim()] as const)
+  if (entries.length === 0) return {}
+
+  const configs = await prisma.providerConfig.findMany({
+    where: { name: { in: entries.map(([provider]) => provider as ProviderName) }, enabled: true },
+    select: { name: true, apiKeyEnc: true },
+  })
+  for (const [provider, voiceId] of entries) {
+    const config = configs.find((candidate) => candidate.name === provider)
+    if (!config?.apiKeyEnc) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: `Enable ${provider} and save its API key before attaching a Voice ID.`,
+      })
+    }
+    try {
+      await validateProviderVoiceId({ provider, apiKeyEnc: config.apiKeyEnc, voiceId })
+    } catch (error) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: error instanceof Error ? error.message : `Invalid ${provider} Voice ID.`,
+      })
+    }
+  }
+  return Object.fromEntries(entries)
+}

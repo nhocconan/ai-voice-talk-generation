@@ -15,8 +15,6 @@ export function PodcastGenerator() {
   const t = useTranslations("generate")
   const [profileAId, setProfileAId] = useState("")
   const [profileBId, setProfileBId] = useState("")
-  const [xaiVoiceAId, setXaiVoiceAId] = useState("")
-  const [xaiVoiceBId, setXaiVoiceBId] = useState("")
   const [providerId, setProviderId] = useState("")
   const [script, setScript] = useState(DEFAULT_SCRIPT)
   const [audiogram, setAudiogram] = useState(false)
@@ -52,7 +50,7 @@ export function PodcastGenerator() {
   const selectedTtsProvider =
     (providerId ? ttsProviders?.find((provider) => provider.id === providerId) : ttsProviders?.find((provider) => provider.isDefault)) ??
     ttsProviders?.[0]
-  const showVoiceIdOverride = selectedTtsProvider?.name === "XAI_TTS" || selectedTtsProvider?.name === "MINIMAX_TTS"
+  const requiredProviderVoiceId = selectedTtsProvider?.name === "XAI_TTS" ? "XAI_TTS" : undefined
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -65,7 +63,6 @@ export function PodcastGenerator() {
         .map((label) => ({
           label,
           profileId: label === "A" ? profileAId : (profileBId || profileAId),
-          xaiVoiceId: label === "A" ? xaiVoiceAId.trim() || undefined : xaiVoiceBId.trim() || xaiVoiceAId.trim() || undefined,
           segments: segments
             .filter((segment) => segment.label === label)
             .map(({ startMs, endMs, text }) => ({ startMs, endMs, text })),
@@ -103,40 +100,16 @@ export function PodcastGenerator() {
           <ProfileSelector
             value={profileAId}
             onChange={setProfileAId}
+            requireProviderVoiceId={requiredProviderVoiceId}
           />
-          {showVoiceIdOverride && (
-            <div>
-              <label htmlFor="xai-voice-a" className="mt-3 block text-xs text-[var(--color-text-secondary)]">{t("voiceIdSpeakerA")}</label>
-              <input
-                id="xai-voice-a"
-                value={xaiVoiceAId}
-                onChange={(event) => setXaiVoiceAId(event.target.value)}
-                placeholder="voice_..."
-                className="mt-1 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] px-3 py-2 text-sm font-mono"
-              />
-              <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">{t("voiceIdOverrideHint")}</p>
-            </div>
-          )}
         </div>
         <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-5 space-y-4">
           <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">{t("speakerB")}</h2>
           <ProfileSelector
             value={profileBId}
             onChange={setProfileBId}
+            requireProviderVoiceId={requiredProviderVoiceId}
           />
-          {showVoiceIdOverride && (
-            <div>
-              <label htmlFor="xai-voice-b" className="mt-3 block text-xs text-[var(--color-text-secondary)]">{t("voiceIdSpeakerB")}</label>
-              <input
-                id="xai-voice-b"
-                value={xaiVoiceBId}
-                onChange={(event) => setXaiVoiceBId(event.target.value)}
-                placeholder="voice_..."
-                className="mt-1 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] px-3 py-2 text-sm font-mono"
-              />
-              <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">{t("voiceIdOverrideHint")}</p>
-            </div>
-          )}
           <p className="text-xs text-[var(--color-text-tertiary)]">
             {t("reuseSpeakerA")}
           </p>

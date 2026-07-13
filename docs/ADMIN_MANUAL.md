@@ -214,7 +214,7 @@ Health red flags:
 
 Audio files are rejected by most social platforms, so any generation can also emit an MP4.
 
-- **Where users turn it on:** the *Video (audiogram)* section on `/generate` (presentation) and `/generate/podcast`. It is off by default. When enabled, the user can set an optional title and pick an aspect ratio: `1:1` (Instagram/Facebook), `9:16` (TikTok/Reels/Shorts), or `16:9` (YouTube).
+- **Where users turn it on:** the *Video (audiogram)* section on `/generate` (presentation), `/generate/podcast`, and `/generate/revoice`. It is off by default. When enabled, the user can set an optional title and pick an aspect ratio: `1:1` (Instagram/Facebook), `9:16` (TikTok/Reels/Shorts), or `16:9` (YouTube).
 - **What gets produced:** an H.264/AAC MP4 at `renders/<generationId>/audiogram.mp4` in MinIO, recorded on the generation row as `outputVideoKey`. It contains an animated dark gradient background, a live cyan waveform, a bottom progress bar, and burned captions.
 - **Where it appears:** the generation history list (inline preview + *Download video*) and, if the generation is shared, the public share page.
 - **Aspect ratio and title are per-render.** Only the `audiogram` boolean is stored on the generation row; the aspect ratio and title live in the render job payload and are gone once the job finishes. Re-rendering the same audio into a different aspect ratio means submitting a new generation.

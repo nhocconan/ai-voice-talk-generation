@@ -290,9 +290,7 @@ Implementations now include `VieNeuProvider`, `VoxCPM2Provider`, `XTTSProvider`,
 
 `MiniMaxProvider` (`apps/worker/src/worker/providers/minimax.py`, `MINIMAX_TTS`) clones a voice via `files/upload` (`purpose=voice_clone`) → `voice_clone` → synthesizes via `t2a_v2`. It derives a deterministic `voice_id` from a SHA-1 hash of the reference clip so repeat renders of the same profile reuse the existing clone instead of paying the clone fee again, and treats a duplicate-id error from `voice_clone` as "clone already exists." Default model is `speech-2.8-hd`; MiniMax lists the `speech-2.6-*` family as deprecated and documents 2.8 as a drop-in replacement with an identical parameter interface. Existing `provider_configs` rows keep whatever model they were seeded with — the default applies to new installs and to configs that omit `model`.
 
-`XAITTSProvider` (`XAI_TTS`) only works as a pinned `customVoiceId` pass-through in this deployment — the `/v1/custom-voices` clone endpoint returns 403 (Enterprise-gated). See `docs/VOICE_PROVIDER_EVALUATION.md` for the full history.
-
-The per-speaker "Voice ID" override field in the web UI (payload key `xaiVoiceId`) is shown for both `XAI_TTS` and `MINIMAX_TTS` — the field name is a legacy alias from when it was xAI-only, not a new concept.
+`XAITTSProvider` (`XAI_TTS`) only works as a pinned provider-native Voice ID pass-through in this deployment — the `/v1/custom-voices` clone endpoint returns 403 (Enterprise-gated). Voice profiles store validated native IDs per provider in `providerVoiceIds` for xAI, MiniMax, and ElevenLabs. The profile editor verifies each non-empty ID against the configured provider account before saving; generation screens select the profile only. The legacy queue field `xaiVoiceId` remains accepted for API compatibility, but the worker normally resolves the selected provider's ID from the profile.
 
 **Model catalog (P5-01).** Each provider also owns rows in `provider_models`. `/admin/models` lets a super admin click *Fetch latest models* to call the provider's list-models endpoint (Gemini, ElevenLabs, xAI today) and upsert the result. Providers without a public listing endpoint seed from a curated default table — admins can still rename, mark default, enable/disable, or delete rows inline. The catalog table is consumed by provider implementations through `provider_configs.config.modelId`, so picking a different default flows through to the next render.
 
@@ -333,6 +331,8 @@ All jobs serialize to JSON in Redis Streams; worker deserializes via pydantic mo
   "audiogramTitle": "Optional title for the audiogram MP4"
 }
 ```
+
+For `kind: "REVOICE"`, the payload also carries `sourceAudioKey`; each speaker has `keepOriginal: true` or a replacement `profileId`. The worker starts with the normalized source waveform and overwrites only replacement intervals, leaving kept speakers and audio outside those intervals intact. Revoice supports the same optional audiogram output as presentation and podcast renders.
 
 `output.audiogramAspect` (TS: `RenderJobOutput.audiogramAspect?: "1:1" | "9:16" | "16:9"`, default `"1:1"`; worker: `RenderOutputPayload.audiogram_aspect`, pydantic alias `audiogramAspect`) selects the audiogram canvas. Web forwards it from the `createPresentation` / `createPodcast` / revoice-submit tRPC inputs into `output`. **`audiogramAspect` and `audiogramTitle` are not persisted to the `Generation` row** — they exist only in the render job payload for that one render; `Generation.audiogram` (the toggle itself) is the only one of the three that is a real Prisma column.
 

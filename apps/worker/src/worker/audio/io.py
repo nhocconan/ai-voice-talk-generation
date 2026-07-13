@@ -111,3 +111,45 @@ async def get_duration_ms(path: Path) -> int:
     data = json.loads(stdout)
     duration = float(data["streams"][0]["duration"])
     return int(duration * 1000)
+
+
+async def fit_audio_duration(src: Path, dest: Path, target_ms: int) -> None:
+    """Time-stretch audio to an exact duration without changing vocal pitch."""
+    if target_ms <= 0:
+        raise ValueError("target_ms must be positive")
+    source_ms = await get_duration_ms(src)
+    if source_ms <= 0:
+        raise ValueError("source audio must have positive duration")
+    filters = _atempo_filters(source_ms / target_ms)
+    filters.extend(["apad", f"atrim=duration={target_ms / 1000:.6f}"])
+    cmd = [
+        "ffmpeg", "-y", "-i", str(src),
+        "-af", ",".join(filters),
+        "-ar", str(SAMPLE_RATE),
+        "-ac", str(CHANNELS),
+        "-sample_fmt", "s16",
+        str(dest),
+    ]
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg duration fit failed: {stderr.decode()}")
+
+
+def _atempo_filters(factor: float) -> list[str]:
+    """Split an atempo ratio into ffmpeg's conservative 0.5-2.0 range."""
+    if factor <= 0:
+        raise ValueError("tempo factor must be positive")
+    filters: list[str] = []
+    while factor > 2.0:
+        filters.append("atempo=2.000000")
+        factor /= 2.0
+    while factor < 0.5:
+        filters.append("atempo=0.500000")
+        factor /= 0.5
+    filters.append(f"atempo={factor:.6f}")
+    return filters

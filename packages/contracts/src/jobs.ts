@@ -16,6 +16,7 @@ export interface RenderJobData {
   output: RenderJobOutput;
   pacingLock: boolean;
   audiogramTitle?: string;
+  sourceAudioKey?: string;
 }
 
 export interface VideoRevoiceJobData {
@@ -28,10 +29,11 @@ export interface VideoRevoiceJobData {
 
 export interface RenderJobSpeaker {
   label: string;
-  profileId: string;
+  profileId?: string | undefined;
   segments: RenderJobSegment[];
   script?: string;
   xaiVoiceId?: string | undefined;
+  keepOriginal?: boolean;
 }
 
 export interface RenderJobSegment {

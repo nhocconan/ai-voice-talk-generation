@@ -9,9 +9,17 @@ import tempfile
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
+import httpx
+import numpy as np
 import soundfile as sf
 
-from ..audio.io import encode_mp3, encode_wav_24bit, get_duration_ms
+from ..audio.io import (
+    encode_mp3,
+    encode_wav_24bit,
+    fit_audio_duration,
+    get_duration_ms,
+    normalize_audio,
+)
 from ..audio.stitch import stitch_segments
 from ..config import settings
 from ..logging import get_logger
@@ -46,6 +54,7 @@ async def run_render(
     progress_fn: Callable[[str, float, str], Awaitable[None]],
     result_fn: Callable[..., Awaitable[None]],
     audiogram_title: str | None = None,
+    source_audio_key: str | None = None,
 ) -> None:
     logger.info("Render start", generation_id=generation_id, kind=kind)
 
@@ -56,6 +65,9 @@ async def run_render(
         voice_refs: dict[str, VoiceRef] = {}
         for spk in speakers:
             label = spk["label"]
+
+            if spk.get("keepOriginal") or spk.get("keep_original"):
+                continue
 
             # Profile pins a provider-native voice_id (e.g. an xAI Console
             # custom voice) — use it directly, no reference cloning needed.
@@ -91,6 +103,23 @@ async def run_render(
                 tmp_dir=tmp_dir,
                 speaker=speakers[0],
                 voice_ref=voice_refs.get(speakers[0]["label"]),
+                provider=provider,
+                progress_fn=progress_fn,
+                generation_id=generation_id,
+                pacing_lock=pacing_lock,
+            )
+        elif kind == "REVOICE":
+            if not source_audio_key:
+                raise ValueError("REVOICE render requires sourceAudioKey")
+            source_path = tmp_dir / "source_audio"
+            source_wav = tmp_dir / "source_normalized.wav"
+            await asyncio.to_thread(download_object, source_audio_key, source_path)
+            await normalize_audio(source_path, source_wav)
+            output_wav, chapters = await _render_revoice(
+                tmp_dir=tmp_dir,
+                source_wav=source_wav,
+                speakers=speakers,
+                voice_refs=voice_refs,
                 provider=provider,
                 progress_fn=progress_fn,
                 generation_id=generation_id,
@@ -266,6 +295,90 @@ async def _render_podcast(
     return output, chapters
 
 
+async def _render_revoice(
+    *,
+    tmp_dir: Path,
+    source_wav: Path,
+    speakers: list[dict],
+    voice_refs: dict[str, VoiceRef],
+    provider: TTSProvider,
+    progress_fn,
+    generation_id: str,
+    pacing_lock: bool = False,
+) -> tuple[Path, list[ChapterEntry]]:
+    """Replace selected speaker intervals while retaining all other source audio."""
+    source, sample_rate = sf.read(str(source_wav), dtype="float32")
+    if sample_rate != SAMPLE_RATE:
+        raise ValueError(f"Expected {SAMPLE_RATE} Hz normalized source, got {sample_rate}")
+    if source.ndim > 1:
+        source = source.mean(axis=1)
+
+    replacements: list[dict] = []
+    all_segments: list[dict] = []
+    for speaker in speakers:
+        keep_original = bool(speaker.get("keepOriginal") or speaker.get("keep_original"))
+        for segment in speaker.get("segments", []):
+            item = {**segment, "label": speaker["label"], "lang": speaker.get("lang", "vi")}
+            all_segments.append(item)
+            if not keep_original:
+                replacements.append(item)
+
+    replacements.sort(key=lambda segment: segment.get("startMs", segment.get("start_ms", 0)))
+    for index, segment in enumerate(replacements):
+        start_ms = int(segment.get("startMs", segment.get("start_ms", 0)))
+        end_ms = int(segment.get("endMs", segment.get("end_ms", start_ms)))
+        if end_ms <= start_ms:
+            continue
+        text = str(segment.get("text", ""))
+        lang = str(segment.get("lang", "vi"))
+        if pacing_lock:
+            text = await _rephrase_for_pacing(text, end_ms - start_ms, lang)
+
+        await progress_fn(
+            generation_id,
+            0.1 + (index / max(len(replacements), 1)) * 0.7,
+            f"Replacing speaker {segment['label']}: segment {index + 1}/{len(replacements)}",
+        )
+        audio_bytes = await provider.synthesize(
+            prepare_tts_text(text, lang),
+            voice_refs.get(str(segment["label"]), VoiceRef("", {})),
+            lang,
+        )
+        clip_path = tmp_dir / f"replacement_{index:04d}.wav"
+        fitted_path = tmp_dir / f"replacement_{index:04d}_fitted.wav"
+        _bytes_to_wav(audio_bytes, clip_path)
+        target_ms = end_ms - start_ms
+        await fit_audio_duration(clip_path, fitted_path, target_ms)
+        clip, clip_rate = sf.read(str(fitted_path), dtype="float32")
+        if clip.ndim > 1:
+            clip = clip.mean(axis=1)
+        target_samples = max(1, round((end_ms - start_ms) * SAMPLE_RATE / 1000))
+        if clip_rate != SAMPLE_RATE:
+            raise ValueError(f"Expected {SAMPLE_RATE} Hz fitted clip, got {clip_rate}")
+        if len(clip) < target_samples:
+            clip = np.pad(clip, (0, target_samples - len(clip)))
+
+        start_sample = max(0, round(start_ms * SAMPLE_RATE / 1000))
+        end_sample = min(len(source), start_sample + target_samples)
+        if end_sample > start_sample:
+            source[start_sample:end_sample] = clip[: end_sample - start_sample]
+
+    output = tmp_dir / "revoiced.wav"
+    sf.write(str(output), np.clip(source, -1.0, 1.0), SAMPLE_RATE, subtype="PCM_16")
+    chapters = [
+        {
+            "title": f"[{segment.get('label', 'A')}] {str(segment.get('text', ''))[:60]}",
+            "start_ms": int(segment.get("startMs", segment.get("start_ms", 0))),
+            "end_ms": int(segment.get("endMs", segment.get("end_ms", 0))),
+        }
+        for segment in sorted(
+            all_segments,
+            key=lambda item: item.get("startMs", item.get("start_ms", 0)),
+        )
+    ]
+    return output, chapters
+
+
 def _chunk_text(text: str, max_chars: int, lang: str = "vi") -> list[str]:
     """Split text into chunks at sentence boundaries."""
     if lang == "vi":
@@ -417,9 +530,33 @@ def _tag_mp3_watermark(mp3_path: Path, generation_id: str) -> None:
 
 
 async def _rephrase_for_pacing(text: str, target_ms: int, lang: str) -> str:
-    """FR-9: Call Gemini to rephrase text to fit within ±5% of target_ms when spoken."""
+    """FR-9: Rephrase text to fit within ±5% of target_ms when spoken.
+
+    Prefers the web app's multi-provider LLM endpoint (works with whatever
+    provider the deployment has configured) and silently degrades: web endpoint
+    → direct env-Gemini → original text. Never fails a render on rephrase error.
+    """
     import os
 
+    # 1. Web endpoint — routes to any configured LLM provider.
+    base = settings.web_base_url.rstrip("/")
+    if base:
+        token = settings.internal_api_token or settings.server_secret
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                resp = await client.post(
+                    f"{base}/api/internal/llm-rephrase",
+                    headers={"x-internal-token": token, "content-type": "application/json"},
+                    json={"text": text, "targetMs": target_ms, "lang": lang},
+                )
+            if resp.status_code == 200:
+                out = str(resp.json().get("text", "")).strip()
+                if out:
+                    return out
+        except Exception as exc:  # best-effort; fall through to env-Gemini
+            logger.warning("Pacing lock web rephrase failed", exc=str(exc))
+
+    # 2. Direct env-Gemini fallback (backward compatible).
     api_key = os.environ.get("GOOGLE_API_KEY", "")
     if not api_key:
         return text  # Skip silently if not configured

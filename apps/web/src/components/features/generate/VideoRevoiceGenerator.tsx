@@ -30,8 +30,6 @@ export function VideoRevoiceGenerator() {
   const [dragOver, setDragOver] = useState(false)
   const [profileAId, setProfileAId] = useState("")
   const [profileBId, setProfileBId] = useState("")
-  const [xaiVoiceAId, setXaiVoiceAId] = useState("")
-  const [xaiVoiceBId, setXaiVoiceBId] = useState("")
   const [providerId, setProviderId] = useState("")
   const [script, setScript] = useState("")
   const [captions, setCaptions] = useState(true)
@@ -57,7 +55,7 @@ export function VideoRevoiceGenerator() {
   const selectedTtsProvider =
     (providerId ? ttsProviders?.find((provider) => provider.id === providerId) : ttsProviders?.find((provider) => provider.isDefault)) ??
     ttsProviders?.[0]
-  const requiresXaiVoiceId = selectedTtsProvider?.name === "XAI_TTS"
+  const requiredProviderVoiceId = selectedTtsProvider?.name === "XAI_TTS" ? "XAI_TTS" : undefined
 
   async function handleFile(file: File) {
     setUploadError(null)
@@ -104,7 +102,6 @@ export function VideoRevoiceGenerator() {
         .map((label) => ({
           label,
           profileId: label === "A" ? profileAId : profileBId || profileAId,
-          xaiVoiceId: label === "A" ? xaiVoiceAId.trim() || undefined : xaiVoiceBId.trim() || xaiVoiceAId.trim() || undefined,
           segments: segments
             .filter((s) => s.label === label)
             .map(({ startMs, endMs, text }) => ({ startMs, endMs, text })),
@@ -235,20 +232,8 @@ export function VideoRevoiceGenerator() {
             <ProfileSelector
               selected={profileAId}
               onSelect={setProfileAId}
+              requireProviderVoiceId={requiredProviderVoiceId}
             />
-            {requiresXaiVoiceId && (
-              <div>
-                <label htmlFor="video-xai-voice-a" className="mt-3 block text-micro text-[var(--color-text-muted)]">{t("xaiVoiceIdSpeakerA")}</label>
-                <input
-                  id="video-xai-voice-a"
-                  value={xaiVoiceAId}
-                  onChange={(event) => setXaiVoiceAId(event.target.value)}
-                  placeholder="voice_..."
-                  className="mt-1 w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui font-mono text-sm"
-                />
-                <p className="mt-1 text-micro text-[var(--color-text-muted)]">{t("xaiVoiceIdOverrideHint")}</p>
-              </div>
-            )}
           </div>
           <div>
             <label className="block text-caption mb-2">
@@ -258,20 +243,8 @@ export function VideoRevoiceGenerator() {
               selected={profileBId}
               onSelect={setProfileBId}
               exclude={profileAId ? [profileAId] : []}
+              requireProviderVoiceId={requiredProviderVoiceId}
             />
-            {requiresXaiVoiceId && (
-              <div>
-                <label htmlFor="video-xai-voice-b" className="mt-3 block text-micro text-[var(--color-text-muted)]">{t("xaiVoiceIdSpeakerB")}</label>
-                <input
-                  id="video-xai-voice-b"
-                  value={xaiVoiceBId}
-                  onChange={(event) => setXaiVoiceBId(event.target.value)}
-                  placeholder="voice_..."
-                  className="mt-1 w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui font-mono text-sm"
-                />
-                <p className="mt-1 text-micro text-[var(--color-text-muted)]">{t("xaiVoiceIdOverrideHint")}</p>
-              </div>
-            )}
           </div>
         </div>
       </section>

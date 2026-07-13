@@ -33,10 +33,11 @@ class RenderSegmentPayload(WorkerPayload):
 
 class RenderSpeakerPayload(WorkerPayload):
     label: str
-    profile_id: str = Field(alias="profileId")
+    profile_id: str | None = Field(default=None, alias="profileId")
     segments: list[RenderSegmentPayload] = Field(default_factory=list)
     script: str | None = None
     xai_voice_id: str | None = Field(default=None, alias="xaiVoiceId")
+    keep_original: bool = Field(default=False, alias="keepOriginal")
 
 
 class RenderOutputPayload(WorkerPayload):
@@ -57,6 +58,7 @@ class RenderJobPayload(WorkerPayload):
     output: RenderOutputPayload = Field(default_factory=RenderOutputPayload)
     pacing_lock: bool = Field(default=False, alias="pacingLock")
     audiogram_title: str | None = Field(default=None, alias="audiogramTitle")
+    source_audio_key: str | None = Field(default=None, alias="sourceAudioKey")
 
 
 class VideoRevoiceJobPayload(WorkerPayload):

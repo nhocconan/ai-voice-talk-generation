@@ -152,14 +152,16 @@ function probeResend(): ServiceHealth {
 
 async function probeGemini(): Promise<ServiceHealth> {
   const apiKey = process.env["GOOGLE_API_KEY"] ?? ""
+  const GEMINI_LABEL = "Gemini (env-key LLM fallback)"
+  const GEMINI_SUPPORTS = ["LLM fallback: script drafting, pacing lock, transcript → timed script"]
   if (!apiKey) {
     return {
       id: "gemini",
-      label: "Gemini (script drafting, pacing lock, transcript conversion)",
+      label: GEMINI_LABEL,
       status: "disabled",
       required: false,
-      supports: ["script drafting", "pacing lock", "transcript → timed script"],
-      setupHint: "Set GOOGLE_API_KEY in apps/web/.env.local and apps/worker/.env to enable Gemini-backed features.",
+      supports: GEMINI_SUPPORTS,
+      setupHint: "Optional. Set GOOGLE_API_KEY in apps/web/.env.local and apps/worker/.env to use Gemini as an env fallback when no LLM provider is configured.",
     }
   }
   try {
@@ -170,19 +172,19 @@ async function probeGemini(): Promise<ServiceHealth> {
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     return {
       id: "gemini",
-      label: "Gemini (script drafting, pacing lock, transcript conversion)",
+      label: GEMINI_LABEL,
       status: "up",
       required: false,
-      supports: ["script drafting", "pacing lock", "transcript → timed script"],
+      supports: GEMINI_SUPPORTS,
     }
   } catch (e) {
     return {
       id: "gemini",
-      label: "Gemini (script drafting, pacing lock, transcript conversion)",
+      label: GEMINI_LABEL,
       status: "degraded",
       required: false,
       detail: String(e),
-      supports: ["script drafting", "pacing lock", "transcript → timed script"],
+      supports: GEMINI_SUPPORTS,
       setupHint: "GOOGLE_API_KEY is set but the API is unreachable. Verify the key at https://aistudio.google.com/apikey.",
     }
   }
@@ -299,7 +301,9 @@ export function deriveFeatureMatrix(services: ServiceHealth[]): FeatureViability
       label: "Two-speaker podcast",
       viable: coreUp,
       blockedBy: missingCore,
-      degradedBy: !isUp("gemini") ? ["Gemini (pacing lock + transcript conversion disabled)"] : [],
+      degradedBy: !isUp("gemini") && !isUp("llm-providers")
+        ? ["LLM (Gemini / Grok / Groq) — pacing lock + transcript conversion disabled"]
+        : [],
     },
     {
       id: "generate.revoice",
@@ -324,16 +328,16 @@ export function deriveFeatureMatrix(services: ServiceHealth[]): FeatureViability
     },
     {
       id: "script.pacingLock",
-      label: "Pacing-lock (Gemini rephrase)",
-      viable: isUp("gemini"),
-      blockedBy: !isUp("gemini") ? ["Gemini API"] : [],
+      label: "Pacing-lock (LLM rephrase)",
+      viable: isUp("gemini") || isUp("llm-providers"),
+      blockedBy: !(isUp("gemini") || isUp("llm-providers")) ? ["LLM provider (Gemini / Grok / Groq)"] : [],
       degradedBy: [],
     },
     {
       id: "script.transcript",
       label: "Transcript → timed script",
-      viable: isUp("gemini"),
-      blockedBy: !isUp("gemini") ? ["Gemini API"] : [],
+      viable: isUp("gemini") || isUp("llm-providers"),
+      blockedBy: !(isUp("gemini") || isUp("llm-providers")) ? ["LLM provider (Gemini / Grok / Groq)"] : [],
       degradedBy: [],
     },
     {

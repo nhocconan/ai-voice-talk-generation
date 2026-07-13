@@ -16,6 +16,9 @@ const profileSchema = z.object({
   name: z.string().min(1, "Required").max(100),
   lang: z.enum(["vi", "en", "multi"]),
   consentGiven: z.literal(true, { errorMap: () => ({ message: "Consent is required" }) }),
+  xaiVoiceId: z.string().trim().max(200).optional(),
+  minimaxVoiceId: z.string().trim().max(256).optional(),
+  elevenLabsVoiceId: z.string().trim().max(200).optional(),
 })
 type ProfileFormData = z.infer<typeof profileSchema>
 
@@ -38,13 +41,24 @@ export function EnrollmentWizard() {
   const selectedLang = watch("lang") ?? "vi"
 
   const onInfoSubmit = async (data: ProfileFormData) => {
-    const profile = await createProfile.mutateAsync({
-      name: data.name,
-      lang: data.lang,
-      consentText: t("consentText"),
-    })
-    setProfileId(profile.id)
-    setStep("record")
+    try {
+      const profile = await createProfile.mutateAsync({
+        name: data.name,
+        lang: data.lang,
+        consentText: t("consentText"),
+        providerVoiceIds: {
+          XAI_TTS: data.xaiVoiceId,
+          MINIMAX_TTS: data.minimaxVoiceId,
+          ELEVENLABS: data.elevenLabsVoiceId,
+        },
+      })
+      setProfileId(profile.id)
+      const hasNativeVoice = [data.xaiVoiceId, data.minimaxVoiceId, data.elevenLabsVoiceId]
+        .some((voiceId) => voiceId !== undefined && voiceId.trim() !== "")
+      setStep(hasNativeVoice ? "done" : "record")
+    } catch {
+      // The mutation error is rendered next to the submit action.
+    }
   }
 
   if (step === "info") {
@@ -108,6 +122,16 @@ export function EnrollmentWizard() {
               </div>
             </div>
 
+            <div>
+              <p className="text-caption mb-1.5">{t("providerVoiceIdsLabel")}</p>
+              <p className="text-micro text-[var(--color-text-muted)] mb-3">{t("providerVoiceIdsCreateHint")}</p>
+              <div className="grid gap-3 md:grid-cols-3">
+                <input aria-label={t("xaiVoiceIdLabel")} {...register("xaiVoiceId")} placeholder={t("xaiVoiceIdLabel")} className="w-full px-3 py-2.5 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui font-mono" />
+                <input aria-label={t("minimaxVoiceIdLabel")} {...register("minimaxVoiceId")} placeholder={t("minimaxVoiceIdLabel")} className="w-full px-3 py-2.5 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui font-mono" />
+                <input aria-label={t("elevenLabsVoiceIdLabel")} {...register("elevenLabsVoiceId")} placeholder={t("elevenLabsVoiceIdLabel")} className="w-full px-3 py-2.5 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui font-mono" />
+              </div>
+            </div>
+
             {/* Consent */}
             <div className="p-4 bg-[var(--color-surface-1)] rounded-[var(--radius-md)]">
               <p className="text-caption text-[var(--color-text-secondary)] mb-3">{t("consentText")}</p>
@@ -131,6 +155,11 @@ export function EnrollmentWizard() {
         >
           {createProfile.isPending ? t("creating") : t("continue")}
         </button>
+        {createProfile.error && (
+          <p role="alert" className="text-micro text-[var(--color-danger)]">
+            {createProfile.error.message}
+          </p>
+        )}
       </form>
     )
   }

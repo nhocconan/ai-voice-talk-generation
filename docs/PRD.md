@@ -118,7 +118,9 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md#admin-cp) for surface list. Invite user 
 | FR-21 | Public share links for generations (time-limited, revocable) | Could |
 | FR-22 | Slack/Teams webhook on generation complete | Could |
 | FR-23 | Audiogram video export selectable in 3 aspect ratios (1:1, 9:16, 16:9) so audio can be posted to platforms that reject bare audio | Should |
-| FR-24 | Per-speaker Voice ID override for cloud providers that key voices by ID (currently `XAI_TTS`, `MINIMAX_TTS`) | Should |
+| FR-24 | One reusable voice profile stores provider-native Voice IDs for xAI, MiniMax, and ElevenLabs; IDs are validated against the configured account before save | Should |
+| FR-25 | Revoice can retain any selected original speaker while replacing the other speaker intervals; single-speaker sources can replace the only voice | Must |
+| FR-26 | Revoice can emit an audiogram with title, theme, and 1:1, 9:16, or 16:9 aspect ratio | Should |
 
 ## 7. Non-Functional Requirements
 
@@ -172,4 +174,5 @@ Track new questions here; close with a decision + PR link.
 ## Changelog
 - 2026-04-19: v1.0 initial draft.
 - 2026-04-20: Refreshed the provider strategy around VieNeu-TTS as the main Mac-first lane and VoxCPM2 as the advanced-quality lane.
-- 2026-07-09: Added FR-23 (audiogram aspect-ratio export) and FR-24 (per-speaker Voice ID override) after the audiogram social-video and MiniMax/VieNeu provider work; updated §5.2/5.3 flows with the audiogram toggle + aspect picker step. Working tree, pending commit.
+- 2026-07-09: Added FR-23 (audiogram aspect-ratio export) and the initial provider Voice ID flow.
+- 2026-07-13: Updated FR-24 to provider-native IDs on reusable profiles; added FR-25 selective speaker retention and FR-26 revoice audiograms.

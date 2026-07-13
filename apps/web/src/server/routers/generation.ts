@@ -11,7 +11,7 @@ import { db } from "@/server/db/client"
 import { GenKind, GenStatus, ProviderName } from "@prisma/client"
 import { randomBytes, randomUUID } from "crypto"
 import { checkFixedWindowLimit } from "@/server/services/rate-limit"
-import { draftScriptWithProvider } from "@/server/services/llm"
+import { completeWithProvider, draftScriptWithProvider } from "@/server/services/llm"
 
 // Gemini text model for script drafting / transcript conversion. Overridable via
 // env so operators can bump it without a code change. Defaults to 2.5-flash
@@ -30,6 +30,12 @@ const ALLOWED_VIDEO_MIMES = [
   "video/x-matroska",
 ]
 
+function assertOwnedSourceAudioKey(userId: string, key: string): void {
+  if (!key.startsWith(`uploads/sources/${userId}/`)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid source audio key" })
+  }
+}
+
 const segmentSchema = z.object({
   startMs: z.number().min(0),
   endMs: z.number().min(0),
@@ -41,6 +47,22 @@ const speakerSchema = z.object({
   profileId: z.string(),
   segments: z.array(segmentSchema),
   xaiVoiceId: z.string().trim().max(200).optional(),
+})
+
+const revoiceSpeakerSchema = z.object({
+  label: z.enum(["A", "B"]),
+  profileId: z.string().optional(),
+  segments: z.array(segmentSchema).min(1),
+  xaiVoiceId: z.string().trim().max(200).optional(),
+  keepOriginal: z.boolean().default(false),
+}).superRefine((speaker, ctx) => {
+  if (!speaker.keepOriginal && !speaker.profileId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["profileId"],
+      message: "A voice profile is required when replacing a speaker.",
+    })
+  }
 })
 
 export const generationRouter = router({
@@ -281,21 +303,28 @@ export const generationRouter = router({
   submitRevoice: protectedProcedure
     .input(z.object({
       sourceAudioKey: z.string(),
-      speakers: z.array(speakerSchema).min(1).max(2),
+      speakers: z.array(revoiceSpeakerSchema).min(1).max(2).refine(
+        (speakers) => speakers.some((speaker) => !speaker.keepOriginal),
+        "Select at least one speaker to replace.",
+      ),
       estimatedMinutes: z.number().min(0.1).max(INPUT_GENERATION_MINUTES_CAP),
       pacingLock: z.boolean().default(false),
       providerId: z.string().optional(),
       audiogram: z.boolean().default(false),
       audiogramTitle: z.string().max(120).optional(),
       audiogramAspect: z.enum(["1:1", "9:16", "16:9"]).default("1:1"),
+      audiogramTheme: z.enum(["dark", "midnight", "forest", "sunset", "brand", "slate"]).default("dark"),
     }))
     .mutation(async ({ ctx, input }) => {
+      assertOwnedSourceAudioKey(ctx.session.user.id, input.sourceAudioKey)
       await enforceRenderRateLimit(ctx.session.user.id)
       await enforceQuota(ctx, input.estimatedMinutes)
       await enforceGenerationLimit(ctx.db, input.estimatedMinutes)
       const providerId = await resolveProvider(ctx, input.providerId)
-      await assertProfilesReady(ctx.db, input.speakers.map((speaker) => speaker.profileId), providerId)
-      await assertXaiVoiceInputs(ctx.db, providerId, input.speakers.map((speaker) => speaker.xaiVoiceId))
+      const replacedSpeakers = input.speakers.filter((speaker) => !speaker.keepOriginal)
+      const profileIds = replacedSpeakers.flatMap((speaker) => speaker.profileId ? [speaker.profileId] : [])
+      await assertProfilesReady(ctx.db, profileIds, providerId)
+      await assertXaiVoiceInputs(ctx.db, providerId, replacedSpeakers.map((speaker) => speaker.xaiVoiceId))
 
       const generation = await ctx.db.generation.create({
         data: {
@@ -306,11 +335,11 @@ export const generationRouter = router({
           sourceAudioKey: input.sourceAudioKey,
           audiogram: input.audiogram,
           speakers: {
-            create: input.speakers.map((s) => ({
+            create: replacedSpeakers.flatMap((s) => s.profileId ? [{
               label: s.label,
               profileId: s.profileId,
               segments: s.segments,
-            })),
+            }] : []),
           },
         },
       })
@@ -319,8 +348,16 @@ export const generationRouter = router({
         generationId: generation.id,
         providerId,
         kind: "REVOICE",
+        sourceAudioKey: input.sourceAudioKey,
         speakers: input.speakers,
-        output: { mp3: true, wav: true, chapters: true, audiogram: input.audiogram, audiogramAspect: input.audiogramAspect },
+        output: {
+          mp3: true,
+          wav: true,
+          chapters: true,
+          audiogram: input.audiogram,
+          audiogramAspect: input.audiogramAspect,
+          audiogramTheme: input.audiogramTheme,
+        },
         pacingLock: input.pacingLock,
         ...(input.audiogramTitle ? { audiogramTitle: input.audiogramTitle } : {}),
       })
@@ -406,6 +443,7 @@ export const generationRouter = router({
   submitAsr: protectedProcedure
     .input(z.object({ sourceAudioKey: z.string(), expectedSpeakers: z.number().min(1).max(2).default(2) }))
     .mutation(async ({ ctx, input }) => {
+      assertOwnedSourceAudioKey(ctx.session.user.id, input.sourceAudioKey)
       const generation = await ctx.db.generation.create({
         data: {
           userId: ctx.session.user.id,
@@ -647,11 +685,6 @@ export const generationRouter = router({
       lang: z.enum(["vi", "en"]).default("vi"),
     }))
     .mutation(async ({ ctx, input }) => {
-      const apiKey = process.env["GOOGLE_API_KEY"]
-      if (!apiKey) {
-        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Gemini API key not configured" })
-      }
-
       const prompt = input.lang === "vi"
         ? `Bạn nhận được một bản ghi cuộc trò chuyện giữa hai người (${input.speakerA} và ${input.speakerB}).
 Chuyển đổi thành kịch bản podcast có định dạng thời gian với ký hiệu "[MM:SS A]" và "[MM:SS B]".
@@ -664,25 +697,50 @@ Estimate reading time per segment (150 wpm). Return only the formatted script.
 Transcript:
 ${input.transcript}`
 
-      const resp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.3, maxOutputTokens: 8192 },
-          }),
-        },
-      )
-
-      if (!resp.ok) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Gemini API error" })
+      // Prefer any configured LLM provider (Gemini / Grok / Groq / xAI / Ollama);
+      // fall back to env GOOGLE_API_KEY Gemini for backward compatibility.
+      const llm = await resolveLlmProvider(ctx.db, undefined, undefined)
+      let text: string
+      if (llm) {
+        try {
+          text = await completeWithProvider({
+            providerName: llm.providerName,
+            providerId: llm.providerId,
+            apiKeyEnc: llm.apiKeyEnc,
+            config: llm.config,
+            model: llm.model,
+            system: "Return only the formatted timed script.",
+            prompt,
+            temperature: 0.3,
+            maxTokens: 8192,
+          })
+        } catch (e) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Transcript conversion failed: ${String(e)}` })
+        }
+      } else {
+        const apiKey = process.env["GOOGLE_API_KEY"]
+        if (!apiKey) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No LLM provider configured and Gemini API key not set" })
+        }
+        const resp = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 0.3, maxOutputTokens: 8192 },
+            }),
+          },
+        )
+        if (!resp.ok) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Gemini API error" })
+        }
+        const data = await resp.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
+        text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
       }
 
-      const data = await resp.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
-      if (!text) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Empty response from Gemini" })
+      if (!text.trim()) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Empty response from LLM" })
 
       await ctx.audit({
         actorId: ctx.session.user.id,
@@ -751,7 +809,7 @@ interface ResolvedLlm {
 
 // Pick the LLM provider + model for draftScript. Returns null when no LLM
 // provider is configured so the caller can fall back to env Gemini.
-async function resolveLlmProvider(
+export async function resolveLlmProvider(
   prisma: typeof db,
   providerId: string | undefined,
   model: string | undefined,
@@ -939,7 +997,7 @@ export async function assertProfilesReady(
     const providerVoiceIds = (profile.providerVoiceIds as Record<string, unknown> | null) ?? {}
     const hasPinnedProviderVoice =
       providerName && typeof providerVoiceIds[providerName] === "string" && providerVoiceIds[providerName].trim().length > 0
-    if (providerName === ProviderName.XAI_TTS) return false
+    if (providerName === ProviderName.XAI_TTS) return !hasPinnedProviderVoice
     const hasActiveSample = profile.samples.some((sample) => sample.version === profile.activeVersion)
     return !hasPinnedProviderVoice && !hasActiveSample
   })
@@ -964,21 +1022,10 @@ export async function assertXaiVoiceInputs(
 ): Promise<void> {
   const provider = await prisma.providerConfig.findUnique({
     where: { id: providerId },
-    select: { name: true, config: true },
+    select: { name: true },
   })
   if (provider?.name !== ProviderName.XAI_TTS) return
-
-  const config =
-    provider.config && typeof provider.config === "object" && !Array.isArray(provider.config)
-      ? (provider.config as Record<string, unknown>)
-      : {}
-  const defaultVoiceId = typeof config["defaultVoiceId"] === "string" ? config["defaultVoiceId"].trim() : ""
-  const hasMissingVoiceId = voiceIds.some((voiceId) => !voiceId?.trim())
-
-  if (hasMissingVoiceId && !defaultVoiceId) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "xAI requires either a per-speaker Voice ID or a Default xAI Voice ID in provider settings.",
-    })
-  }
+  // Profile-native IDs are checked by assertProfilesReady. The optional values
+  // here are retained only for backward-compatible API overrides.
+  void voiceIds
 }

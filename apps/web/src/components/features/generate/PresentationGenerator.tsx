@@ -19,7 +19,6 @@ const schema = z.object({
   script: z.string().min(10, "Script too short").max(500000),
   estimatedMinutes: z.coerce.number().min(0.1).max(60),
   providerId: z.string().optional(),
-  xaiVoiceId: z.string().trim().max(200).optional(),
   audiogram: z.boolean(),
   audiogramTitle: z.string().trim().max(120).optional(),
   audiogramAspect: z.enum(["1:1", "9:16", "16:9"]),
@@ -84,7 +83,6 @@ export function PresentationGenerator() {
     defaultValues: {
       estimatedMinutes: 5,
       providerId: "",
-      xaiVoiceId: "",
       audiogram: false,
       audiogramTitle: "",
       audiogramAspect: "1:1",
@@ -105,17 +103,14 @@ export function PresentationGenerator() {
   const selectedTtsProvider =
     (providerId ? ttsProviders?.find((provider) => provider.id === providerId) : ttsProviders?.find((provider) => provider.isDefault)) ??
     ttsProviders?.[0]
-  const showVoiceIdOverride = selectedTtsProvider?.name === "XAI_TTS" || selectedTtsProvider?.name === "MINIMAX_TTS"
+  const requiredProviderVoiceId = selectedTtsProvider?.name === "XAI_TTS" ? "XAI_TTS" : undefined
 
   const onSubmit = async (data: FormData) => {
     try {
-      const trimmedVoiceId = data.xaiVoiceId?.trim()
       const { generationId: id } = await create.mutateAsync({
         ...data,
         // Empty string from the select must not override the server default.
         providerId: data.providerId === "" ? undefined : data.providerId,
-        // Empty / whitespace-only voice override must not be sent.
-        xaiVoiceId: trimmedVoiceId !== undefined && trimmedVoiceId !== "" ? trimmedVoiceId : undefined,
       })
       setGenerationId(id)
     } catch {
@@ -160,6 +155,7 @@ export function PresentationGenerator() {
             <ProfileSelector
               selected={profileId}
               onSelect={(id) => setValue("profileId", id)}
+              requireProviderVoiceId={requiredProviderVoiceId}
             />
             {errors.profileId && <p className="text-micro text-[var(--color-danger)] mt-1">{errors.profileId.message}</p>}
           </div>
@@ -185,21 +181,6 @@ export function PresentationGenerator() {
             onChange={(id) => setValue("providerId", id)}
             description={t("providerCompareHint")}
           />
-
-          {showVoiceIdOverride && (
-            <div>
-              <label htmlFor="xaiVoiceId" className="block text-caption mb-2">
-                {t("voiceIdOverride")}
-              </label>
-              <input
-                id="xaiVoiceId"
-                {...register("xaiVoiceId")}
-                placeholder="voice_..."
-                className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui font-mono"
-              />
-              <p className="text-micro text-[var(--color-text-muted)] mt-1">{t("voiceIdOverrideHint")}</p>
-            </div>
-          )}
 
           <div>
             <p className="text-caption mb-2">{t("audiogramSection")}</p>

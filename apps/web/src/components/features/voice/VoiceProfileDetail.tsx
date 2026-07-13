@@ -27,6 +27,8 @@ export function VoiceProfileDetail({ profileId }: Props) {
   const [name, setName] = useState("")
   const [lang, setLang] = useState<"vi" | "en" | "multi">("vi")
   const [xaiVoiceId, setXaiVoiceId] = useState("")
+  const [minimaxVoiceId, setMinimaxVoiceId] = useState("")
+  const [elevenLabsVoiceId, setElevenLabsVoiceId] = useState("")
   const [message, setMessage] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ version: number; url: string } | null>(null)
   const [loadingPreview, setLoadingPreview] = useState<number | null>(null)
@@ -38,14 +40,29 @@ export function VoiceProfileDetail({ profileId }: Props) {
     setLang(profile.lang as "vi" | "en" | "multi")
     const voiceIds = (profile.providerVoiceIds ?? {}) as Record<string, string>
     setXaiVoiceId(voiceIds["XAI_TTS"] ?? "")
+    setMinimaxVoiceId(voiceIds["MINIMAX_TTS"] ?? "")
+    setElevenLabsVoiceId(voiceIds["ELEVENLABS"] ?? "")
   }, [profile])
 
   async function saveProfile() {
     setMessage(null)
-    await updateProfile.mutateAsync({ id: profileId, name: name.trim(), lang, xaiVoiceId: xaiVoiceId.trim() })
-    await utils.voiceProfile.get.invalidate({ id: profileId })
-    await utils.voiceProfile.list.invalidate()
-    setMessage(t("profileSaved"))
+    try {
+      await updateProfile.mutateAsync({
+        id: profileId,
+        name: name.trim(),
+        lang,
+        providerVoiceIds: {
+          XAI_TTS: xaiVoiceId.trim(),
+          MINIMAX_TTS: minimaxVoiceId.trim(),
+          ELEVENLABS: elevenLabsVoiceId.trim(),
+        },
+      })
+      await utils.voiceProfile.get.invalidate({ id: profileId })
+      await utils.voiceProfile.list.invalidate()
+      setMessage(t("profileSaved"))
+    } catch {
+      // The mutation error is rendered below so provider validation failures are actionable.
+    }
   }
 
   async function playSample(version: number) {
@@ -169,18 +186,16 @@ export function VoiceProfileDetail({ profileId }: Props) {
             {t("saveProfile")}
           </button>
         </div>
-        <div className="mt-4">
-          <label htmlFor="profile-xai-voice-id" className="block text-caption mb-1.5">{t("xaiVoiceIdLabel")}</label>
-          <input
-            id="profile-xai-voice-id"
-            value={xaiVoiceId}
-            onChange={(e) => setXaiVoiceId(e.target.value)}
-            disabled={!canEdit}
-            placeholder="voice_abc123"
-            className="w-full px-3 py-2.5 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui font-mono disabled:opacity-60"
-          />
-          <p className="text-micro text-[var(--color-text-muted)] mt-1.5">{t("xaiVoiceIdHint")}</p>
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <ProviderVoiceIdField id="profile-xai-voice-id" label={t("xaiVoiceIdLabel")} hint={t("xaiVoiceIdHint")} value={xaiVoiceId} onChange={setXaiVoiceId} disabled={!canEdit} />
+          <ProviderVoiceIdField id="profile-minimax-voice-id" label={t("minimaxVoiceIdLabel")} hint={t("providerVoiceIdValidatedHint")} value={minimaxVoiceId} onChange={setMinimaxVoiceId} disabled={!canEdit} />
+          <ProviderVoiceIdField id="profile-elevenlabs-voice-id" label={t("elevenLabsVoiceIdLabel")} hint={t("providerVoiceIdValidatedHint")} value={elevenLabsVoiceId} onChange={setElevenLabsVoiceId} disabled={!canEdit} />
         </div>
+        {updateProfile.error && (
+          <p role="alert" className="mt-3 text-micro text-[var(--color-danger)]">
+            {updateProfile.error.message}
+          </p>
+        )}
       </section>
 
       <section
@@ -299,6 +314,25 @@ export function VoiceProfileDetail({ profileId }: Props) {
           <AudioUploader profileId={profileId} onComplete={() => void refreshProfile()} />
         )}
       </section>
+    </div>
+  )
+}
+
+interface ProviderVoiceIdFieldProps {
+  id: string
+  label: string
+  hint: string
+  value: string
+  onChange: (value: string) => void
+  disabled: boolean
+}
+
+function ProviderVoiceIdField({ id, label, hint, value, onChange, disabled }: ProviderVoiceIdFieldProps) {
+  return (
+    <div>
+      <label htmlFor={id} className="block text-caption mb-1.5">{label}</label>
+      <input id={id} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} placeholder="voice_abc123" className="w-full px-3 py-2.5 rounded-[var(--radius-md)] border border-[var(--color-border)] text-body-ui font-mono disabled:opacity-60" />
+      <p className="text-micro text-[var(--color-text-muted)] mt-1.5">{hint}</p>
     </div>
   )
 }
