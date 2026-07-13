@@ -46,14 +46,12 @@ const speakerSchema = z.object({
   label: z.enum(["A", "B"]),
   profileId: z.string(),
   segments: z.array(segmentSchema),
-  xaiVoiceId: z.string().trim().max(200).optional(),
 })
 
 const revoiceSpeakerSchema = z.object({
   label: z.enum(["A", "B"]),
   profileId: z.string().optional(),
   segments: z.array(segmentSchema).min(1),
-  xaiVoiceId: z.string().trim().max(200).optional(),
   keepOriginal: z.boolean().default(false),
 }).superRefine((speaker, ctx) => {
   if (!speaker.keepOriginal && !speaker.profileId) {
@@ -166,7 +164,6 @@ export const generationRouter = router({
       script: z.string().min(10),
       estimatedMinutes: z.number().min(0.1).max(INPUT_GENERATION_MINUTES_CAP),
       providerId: z.string().optional(),
-      xaiVoiceId: z.string().trim().max(200).optional(),
       audiogram: z.boolean().default(false),
       audiogramTitle: z.string().max(120).optional(),
       audiogramAspect: z.enum(["1:1", "9:16", "16:9"]).default("1:1"),
@@ -178,7 +175,6 @@ export const generationRouter = router({
       await enforceGenerationLimit(ctx.db, input.estimatedMinutes)
       const providerId = await resolveProvider(ctx, input.providerId)
       await assertProfilesReady(ctx.db, [input.profileId], providerId)
-      await assertXaiVoiceInputs(ctx.db, providerId, [input.xaiVoiceId])
 
       const generation = await ctx.db.generation.create({
         data: {
@@ -202,7 +198,7 @@ export const generationRouter = router({
         generationId: generation.id,
         providerId,
         kind: "PRESENTATION",
-        speakers: [{ label: "A", profileId: input.profileId, segments: [], script: input.script, xaiVoiceId: input.xaiVoiceId }],
+        speakers: [{ label: "A", profileId: input.profileId, segments: [], script: input.script }],
         output: {
           mp3: true,
           wav: true,
@@ -237,7 +233,6 @@ export const generationRouter = router({
       await enforceGenerationLimit(ctx.db, input.estimatedMinutes)
       const providerId = await resolveProvider(ctx, input.providerId)
       await assertProfilesReady(ctx.db, input.speakers.map((speaker) => speaker.profileId), providerId)
-      await assertXaiVoiceInputs(ctx.db, providerId, input.speakers.map((speaker) => speaker.xaiVoiceId))
 
       const script = input.speakers
         .flatMap((s) => s.segments)
@@ -324,7 +319,6 @@ export const generationRouter = router({
       const replacedSpeakers = input.speakers.filter((speaker) => !speaker.keepOriginal)
       const profileIds = replacedSpeakers.flatMap((speaker) => speaker.profileId ? [speaker.profileId] : [])
       await assertProfilesReady(ctx.db, profileIds, providerId)
-      await assertXaiVoiceInputs(ctx.db, providerId, replacedSpeakers.map((speaker) => speaker.xaiVoiceId))
 
       const generation = await ctx.db.generation.create({
         data: {
@@ -401,7 +395,6 @@ export const generationRouter = router({
       await enforceGenerationLimit(ctx.db, input.estimatedMinutes)
       const providerId = await resolveProvider(ctx, input.providerId)
       await assertProfilesReady(ctx.db, input.speakers.map((s) => s.profileId), providerId)
-      await assertXaiVoiceInputs(ctx.db, providerId, input.speakers.map((speaker) => speaker.xaiVoiceId))
 
       const generation = await ctx.db.generation.create({
         data: {
@@ -647,12 +640,10 @@ export const generationRouter = router({
       profileId: z.string(),
       script: z.string().min(10),
       providerId: z.string().optional(),
-      xaiVoiceId: z.string().trim().max(200).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const providerId = await resolveProvider(ctx, input.providerId)
       await assertProfilesReady(ctx.db, [input.profileId], providerId)
-      await assertXaiVoiceInputs(ctx.db, providerId, [input.xaiVoiceId])
 
       const workerUrl = process.env["WORKER_URL"] ?? "http://localhost:8001"
       const resp = await fetch(`${workerUrl}/preview`, {
@@ -662,7 +653,6 @@ export const generationRouter = router({
           provider_id: providerId,
           profile_id: input.profileId,
           script: input.script,
-          xai_voice_id: input.xaiVoiceId,
           max_chars: 250,
         }),
       })
@@ -1013,19 +1003,4 @@ export async function assertProfilesReady(
       message: `Voice profile "${notReady.name}" is still processing. Wait for its active sample to finish ingesting before rendering.`,
     })
   }
-}
-
-export async function assertXaiVoiceInputs(
-  prisma: typeof db,
-  providerId: string,
-  voiceIds: Array<string | undefined>,
-): Promise<void> {
-  const provider = await prisma.providerConfig.findUnique({
-    where: { id: providerId },
-    select: { name: true },
-  })
-  if (provider?.name !== ProviderName.XAI_TTS) return
-  // Profile-native IDs are checked by assertProfilesReady. The optional values
-  // here are retained only for backward-compatible API overrides.
-  void voiceIds
 }

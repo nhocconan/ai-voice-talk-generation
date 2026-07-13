@@ -36,7 +36,6 @@ class RenderSpeakerPayload(WorkerPayload):
     profile_id: str | None = Field(default=None, alias="profileId")
     segments: list[RenderSegmentPayload] = Field(default_factory=list)
     script: str | None = None
-    xai_voice_id: str | None = Field(default=None, alias="xaiVoiceId")
     keep_original: bool = Field(default=False, alias="keepOriginal")
 
 

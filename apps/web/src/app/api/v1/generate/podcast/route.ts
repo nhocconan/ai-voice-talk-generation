@@ -9,10 +9,10 @@ import { enqueueRenderJob } from "@/server/queue/producers"
 import { writeAuditLog } from "@/server/services/audit"
 import { GenKind, GenStatus } from "@prisma/client"
 import { apiError, apiOk, mapTrpcError, resolveWriteCaller } from "@/server/api/rest"
-import { enforceRenderRateLimit, enforceQuota, enforceGenerationLimit, assertProfilesReady, assertXaiVoiceInputs, resolveProvider } from "@/server/routers/generation"
+import { enforceRenderRateLimit, enforceQuota, enforceGenerationLimit, assertProfilesReady, resolveProvider } from "@/server/routers/generation"
 
 const segmentSchema = z.object({ startMs: z.number().min(0), endMs: z.number().min(0), text: z.string() })
-const speakerSchema = z.object({ label: z.enum(["A", "B"]), profileId: z.string(), segments: z.array(segmentSchema), xaiVoiceId: z.string().trim().max(200).optional() })
+const speakerSchema = z.object({ label: z.enum(["A", "B"]), profileId: z.string(), segments: z.array(segmentSchema) })
 const bodySchema = z.object({
   speakers: z.array(speakerSchema).min(1).max(2),
   estimatedMinutes: z.number().min(0.1).max(720),
@@ -48,7 +48,6 @@ export async function POST(req: NextRequest) {
     await enforceGenerationLimit(db, input.estimatedMinutes)
     const providerId = await resolveProvider({ db }, input.providerId)
     await assertProfilesReady(db, input.speakers.map((s) => s.profileId), providerId)
-    await assertXaiVoiceInputs(db, providerId, input.speakers.map((speaker) => speaker.xaiVoiceId))
 
     const script = input.speakers
       .flatMap((s) => s.segments)

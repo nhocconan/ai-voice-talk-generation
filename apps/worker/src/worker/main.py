@@ -297,11 +297,8 @@ async def _get_speaker_sample_keys(
                 voice_ids = profile_row["providerVoiceIds"] if profile_row else {}
                 if isinstance(voice_ids, (str, bytes, bytearray)):
                     voice_ids = _json.loads(voice_ids)
-                payload_voice_id = str(
-                    spk.get("xaiVoiceId") or spk.get("xai_voice_id") or ""
-                ).strip()
                 profile_voice_id = (voice_ids or {}).get(provider_name, "") if provider_name else ""
-                pinned = payload_voice_id or profile_voice_id
+                pinned = profile_voice_id
 
                 sample_rows = []
                 if provider_name != "XAI_TTS":
@@ -570,7 +567,6 @@ class PreviewRequest(_BaseModel):
     provider_id: str
     profile_id: str
     script: str
-    xai_voice_id: str | None = None
     # How many characters to render (≈15 s at average speaking rate)
     max_chars: int = 250
 
@@ -592,7 +588,7 @@ async def preview_audio(req: PreviewRequest):
     try:
         provider = await _get_provider_for_generation(req.provider_id)
         speakers = await _get_speaker_sample_keys(
-            [{"label": "A", "profileId": req.profile_id, "segments": [], "xaiVoiceId": req.xai_voice_id}],
+            [{"label": "A", "profileId": req.profile_id, "segments": []}],
             provider_name=provider.name,
         )
         spk = speakers[0]

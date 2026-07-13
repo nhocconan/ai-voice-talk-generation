@@ -268,7 +268,7 @@ Goal: audio generations can be published to platforms that reject bare audio fil
 - [x] **P6-03** FR-23 (web): expose audiogram in the UI — toggle, title, aspect picker; video download + inline preview in history and on the public share page. · verified 2026-07-09 · working tree, pending commit
   - AC: `PresentationGenerator` and `PodcastGenerator` send `audiogram`, `audiogramTitle`, `audiogramAspect`; the three create procedures accept them and forward them into the render job `output`. `GenerationHistoryList` and `/share/[token]` render a `<video>` player and a download link when `outputVideoKey` is set. Contract round-trip verified: web `audiogramAspect` → worker `audiogram_aspect`; omitted → `"1:1"`.
   - DoD: Universal, A, B.
-- [x] **P6-04** FR-24: per-speaker Voice ID override shown for `XAI_TTS` and `MINIMAX_TTS` (payload key remains the legacy alias `xaiVoiceId`). · verified 2026-07-09 · working tree, pending commit
+- [x] **P6-04** FR-24: provider-native Voice IDs are validated and stored on voice profiles; generation paths select profiles only. · verified 2026-07-13
   - AC: The override input renders for both providers with provider-neutral copy. Worker `render.py` maps a pinned `provider_voice_id` straight to a `VoiceRef` and skips reference cloning.
   - DoD: Universal, B.
 - [x] **P6-05** MiniMax provider verification + model rotation to `speech-2.8-hd`. · verified 2026-07-09 · working tree, pending commit
