@@ -26,11 +26,11 @@ dependencies = [
     "google-generativeai>=0.8.0",
     "openai>=1.59.0",  # elevenlabs client uses openai-compatible or direct REST
     "faster-whisper>=1.1.0",
-    "pyannote.audio>=3.3.2",
+    "pyannote.audio>=3.3.2,<4.0.0",
     "silero-vad>=5.1.2",
     "underthesea>=6.8.4",
-    "torch>=2.5.0",
-    "torchaudio>=2.5.0",
+    "torch>=2.5.0,<2.6.0",
+    "torchaudio>=2.5.0,<2.6.0",
     "TTS>=0.22.0",
     # XTTS (Coqui TTS 0.22) imports BeamSearchScorer from transformers top-level;
     # broken on transformers >= 4.46 / 5.x.

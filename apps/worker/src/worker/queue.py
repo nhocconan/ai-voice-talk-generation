@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import redis.asyncio as aioredis
@@ -16,6 +18,9 @@ from .config import settings
 from .logging import get_logger
 
 logger = get_logger("queue")
+
+PENDING_RETRY_SECONDS = 60
+MAX_DELIVERIES = 3
 
 JobHandler = Callable[[str, object], Awaitable[None]]
 
@@ -70,6 +75,7 @@ class QueueConsumer:
         self._redis: aioredis.Redis | None = None
         self._handlers: dict[str, RegisteredHandler] = {}
         self._running = False
+        self._next_pending_retry = 0.0
 
     def register(
         self,
@@ -98,6 +104,9 @@ class QueueConsumer:
 
         while self._running:
             try:
+                if time.monotonic() >= self._next_pending_retry:
+                    await self._recover_pending()
+                    self._next_pending_retry = time.monotonic() + PENDING_RETRY_SECONDS
                 results = await self._redis.xreadgroup(
                     self.group,
                     self.consumer,
@@ -114,19 +123,68 @@ class QueueConsumer:
                 logger.error("Consumer error", error=str(e))
                 await asyncio.sleep(1)
 
-    async def _handle(self, msg_id: str, fields: dict[str, str]) -> None:
+    async def _recover_pending(self) -> None:
+        """Resume messages owned by this stable consumer after a worker restart."""
+        if self._redis is None:
+            raise RuntimeError("QueueConsumer.start() must be called before recovery")
+
+        while self._running:
+            results = await self._redis.xreadgroup(
+                self.group,
+                self.consumer,
+                {self.stream_key: "0"},
+                count=1,
+            )
+            messages = [
+                (msg_id, fields)
+                for _stream, stream_messages in results or []
+                for msg_id, fields in stream_messages
+            ]
+            if not messages:
+                return
+
+            msg_id, fields = messages[0]
+            pending = await self._redis.xpending_range(
+                self.stream_key,
+                self.group,
+                min=msg_id,
+                max=msg_id,
+                count=1,
+                consumername=self.consumer,
+            )
+            deliveries = int(pending[0].get("times_delivered", 1)) if pending else 1
+            if deliveries > MAX_DELIVERIES:
+                logger.error(
+                    "Pending job exhausted retries",
+                    queue=self.queue_name,
+                    msg_id=msg_id,
+                    deliveries=deliveries,
+                )
+                await self._ack(msg_id)
+                continue
+
+            logger.warning(
+                "Recovering pending job",
+                queue=self.queue_name,
+                msg_id=msg_id,
+                attempt=deliveries,
+            )
+            if not await self._handle(msg_id, fields):
+                return
+
+    async def _handle(self, msg_id: str, fields: dict[str, str]) -> bool:
         try:
             message = decode_stream_message(fields)
         except (TypeError, ValueError) as exc:
             logger.error("Malformed stream message", msg_id=msg_id, error=str(exc))
             await self._ack(msg_id)
-            return
+            return True
 
         registered = self._handlers.get(message.job_name)
         if not registered:
             logger.warning("No handler", job=message.job_name)
             await self._ack(msg_id)
-            return
+            return True
 
         payload: object = message.payload
         if registered.payload_model is not None:
@@ -135,7 +193,7 @@ class QueueConsumer:
             except ValidationError as exc:
                 logger.error("Invalid job payload", job=message.job_name, errors=exc.errors())
                 await self._ack(msg_id)
-                return
+                return True
 
         try:
             logger.info("Job start", job=message.job_name, msg_id=msg_id)
@@ -145,6 +203,9 @@ class QueueConsumer:
         except Exception as e:
             logger.error("Job failed", job=message.job_name, error=str(e))
             # Leave the message pending for retry/recovery.
+            return False
+        else:
+            return True
 
     async def _ack(self, msg_id: str) -> None:
         if self._redis is None:
@@ -165,9 +226,10 @@ async def publish_progress(generation_id: str, phase: str, progress: float, mess
                 "phase": phase,
                 "progress": progress,
                 "message": message,
-                "ts": asyncio.get_running_loop().time(),
+                "ts": datetime.now(UTC).isoformat(),
             }
         )
+        await redis.set(f"job:{generation_id}:progress", payload, ex=7 * 24 * 60 * 60)
         await redis.publish(f"job:{generation_id}:events", payload)
     finally:
         await redis.aclose()

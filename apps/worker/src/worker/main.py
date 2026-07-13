@@ -355,12 +355,42 @@ async def handle_asr(job_name: str, data: object) -> None:
     if not isinstance(data, AsrJobPayload):
         raise TypeError(f"{job_name} expected AsrJobPayload")
 
-    await run_asr(
-        generation_id=data.generation_id,
-        source_key=data.source_key,
-        expected_speakers=data.expected_speakers,
-        result_fn=_db_asr_result,
-    )
+    import os
+
+    import psycopg2
+
+    generation_id = data.generation_id
+    try:
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        with conn.cursor() as cur:
+            cur.execute(
+                """UPDATE generations
+                   SET status='RUNNING', "startedAt"=COALESCE("startedAt", now()),
+                       "finishedAt"=NULL, "errorMessage"=NULL
+                   WHERE id=%s""",
+                (generation_id,),
+            )
+        conn.commit()
+        conn.close()
+        await publish_progress(generation_id, "ASR", 0.01, "Starting transcription")
+
+        async def progress(gid: str, pct: float, msg: str) -> None:
+            await publish_progress(gid, "ASR", pct, msg)
+
+        await run_asr(
+            generation_id=generation_id,
+            source_key=data.source_key,
+            expected_speakers=data.expected_speakers,
+            result_fn=_db_asr_result,
+            progress_fn=progress,
+        )
+        await publish_progress(generation_id, "DONE", 1.0, "Transcription complete")
+    except Exception as error:
+        logger.error("ASR job failed", generation_id=generation_id, error=str(error))
+        await _db_render_failed(generation_id=generation_id, error=str(error))
+        await publish_progress(generation_id, "FAILED", 0.0, str(error))
+        await _notify_job_complete(generation_id)
+        raise
 
 
 async def handle_render(job_name: str, data: object) -> None:
@@ -379,6 +409,7 @@ async def handle_render(job_name: str, data: object) -> None:
 
     with span("render.generation", {"generation_id": generation_id, "kind": kind}):
         try:
+            await publish_progress(generation_id, "STARTING", 0.01, "Starting render")
             provider = await _get_provider_for_generation(provider_id)
             provider_name = provider.name
 
@@ -388,7 +419,10 @@ async def handle_render(job_name: str, data: object) -> None:
             conn = psycopg2.connect(os.environ["DATABASE_URL"])
             with conn.cursor() as cur:
                 cur.execute(
-                    "UPDATE generations SET status='RUNNING', \"startedAt\"=now() WHERE id=%s",
+                    """UPDATE generations
+                       SET status='RUNNING', "startedAt"=COALESCE("startedAt", now()),
+                           "finishedAt"=NULL, "errorMessage"=NULL
+                       WHERE id=%s""",
                     (generation_id,),
                 )
             conn.commit()
@@ -440,13 +474,17 @@ async def handle_video_revoice(job_name: str, data: object) -> None:
     with span("render.video_revoice", {"generation_id": generation_id}):
         provider_name = "unknown"
         try:
+            await publish_progress(generation_id, "STARTING", 0.01, "Starting video render")
             provider = await _get_provider_for_generation(data.provider_id)
             provider_name = provider.name
 
             conn = psycopg2.connect(os.environ["DATABASE_URL"])
             with conn.cursor() as cur:
                 cur.execute(
-                    "UPDATE generations SET status='RUNNING', \"startedAt\"=now() WHERE id=%s",
+                    """UPDATE generations
+                       SET status='RUNNING', "startedAt"=COALESCE("startedAt", now()),
+                           "finishedAt"=NULL, "errorMessage"=NULL
+                       WHERE id=%s""",
                     (generation_id,),
                 )
             conn.commit()

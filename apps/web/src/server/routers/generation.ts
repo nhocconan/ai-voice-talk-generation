@@ -12,6 +12,7 @@ import { GenKind, GenStatus, ProviderName } from "@prisma/client"
 import { randomBytes, randomUUID } from "crypto"
 import { checkFixedWindowLimit } from "@/server/services/rate-limit"
 import { completeWithProvider, draftScriptWithProvider } from "@/server/services/llm"
+import { getJobProgress } from "@/server/services/job-progress"
 
 // Gemini text model for script drafting / transcript conversion. Overridable via
 // env so operators can bump it without a code change. Defaults to 2.5-flash
@@ -154,7 +155,10 @@ export const generationRouter = router({
       const role = ctx.session.user.role as string
       const isAdmin = role === "ADMIN" || role === "SUPER_ADMIN"
       if (!isAdmin && gen.userId !== ctx.session.user.id) throw new TRPCError({ code: "FORBIDDEN" })
-      return gen
+      const jobProgress = gen.status === GenStatus.QUEUED || gen.status === GenStatus.RUNNING
+        ? await getJobProgress(gen.id)
+        : null
+      return { ...gen, jobProgress }
     }),
 
   // Check & enforce quota

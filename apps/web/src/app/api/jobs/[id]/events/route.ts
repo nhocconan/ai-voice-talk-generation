@@ -21,36 +21,51 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const encoder = new TextEncoder()
   const redis = new Redis(env.REDIS_URL)
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  let closed = false
 
   const stream = new ReadableStream({
     async start(controller) {
       const channel = `job:${id}:events`
 
+      const close = () => {
+        if (closed) return
+        closed = true
+        if (timeout) clearTimeout(timeout)
+        redis.unsubscribe(channel).catch(() => undefined)
+        redis.quit().catch(() => undefined)
+        controller.close()
+      }
+
       const onMessage = (_ch: string, message: string) => {
+        if (closed) return
         controller.enqueue(encoder.encode(`data: ${message}\n\n`))
         try {
           const data = JSON.parse(message) as { phase?: string }
           if (data.phase === "DONE" || data.phase === "FAILED") {
-            redis.unsubscribe(channel).catch(() => undefined)
-            redis.quit().catch(() => undefined)
-            controller.close()
+            close()
           }
         } catch {
           // ignore parse errors
         }
       }
 
-      await redis.subscribe(channel)
       redis.on("message", onMessage)
+      await redis.subscribe(channel)
+      const snapshotRedis = redis.duplicate()
+      try {
+        const snapshot = await snapshotRedis.get(`job:${id}:progress`)
+        if (snapshot) onMessage(channel, snapshot)
+      } finally {
+        snapshotRedis.disconnect()
+      }
 
       // Timeout after 10 minutes
-      setTimeout(() => {
-        redis.unsubscribe(channel).catch(() => undefined)
-        redis.quit().catch(() => undefined)
-        controller.close()
-      }, 10 * 60 * 1000)
+      if (!closed) timeout = setTimeout(close, 10 * 60 * 1000)
     },
     cancel() {
+      closed = true
+      if (timeout) clearTimeout(timeout)
       redis.quit().catch(() => undefined)
     },
   })

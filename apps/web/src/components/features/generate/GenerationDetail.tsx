@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useTranslations } from "next-intl"
 import { trpc } from "@/lib/trpc/client"
+import { GenerationProgress } from "./GenerationProgress"
 
 const STATUS_KEYS: Record<string, string> = {
   QUEUED: "statusQueued",
@@ -15,7 +16,15 @@ const STATUS_KEYS: Record<string, string> = {
 export function GenerationDetail({ generationId }: { generationId: string }) {
   const t = useTranslations("history")
   const [shareLink, setShareLink] = useState<string | null>(null)
-  const { data: generation, isLoading } = trpc.generation.get.useQuery({ id: generationId })
+  const { data: generation, isLoading } = trpc.generation.get.useQuery(
+    { id: generationId },
+    {
+      refetchInterval: (query) => {
+        const status = query.state.data?.status
+        return status === "QUEUED" || status === "RUNNING" ? 2000 : false
+      },
+    },
+  )
   const { data: downloads } = trpc.generation.getDownloadUrls.useQuery(
     { id: generationId },
     { enabled: generation?.status === "DONE" },
@@ -72,6 +81,10 @@ export function GenerationDetail({ generationId }: { generationId: string }) {
           </p>
         </div>
       </div>
+
+      {(generation.status === "QUEUED" || generation.status === "RUNNING") && (
+        <GenerationProgress generationId={generationId} />
+      )}
 
       {generation.errorMessage ? (
         <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)] px-4 py-3 text-body-ui text-[var(--color-danger)]">

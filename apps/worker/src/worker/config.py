@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     # ASR_MODEL=large-v3 for maximum accuracy.
     asr_model: str = "large-v3-turbo"
     asr_compute_type: str = "auto"
+    diarization_model: str = "pyannote/speaker-diarization-3.1"
 
     # Expand Vietnamese numbers/dates/currency/etc. to spoken form before TTS
     # (e.g. "123 tỷ" → "một trăm hai mươi ba tỷ"). On by default for vi content;

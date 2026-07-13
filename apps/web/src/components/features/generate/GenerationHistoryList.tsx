@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { useTranslations } from "next-intl"
 import type { inferRouterOutputs } from "@trpc/server"
 import { Trash2Icon } from "lucide-react"
@@ -101,6 +102,12 @@ function HistoryItemRow({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <Link
+            href={`/history/${item.id}`}
+            className="rounded-md border border-[var(--color-border)] px-3 py-1 text-xs font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-surface-1)]"
+          >
+            {t("viewDetails")}
+          </Link>
           {canPlay ? (
             <a
               href={`/api/download/${item.id}`}
@@ -211,7 +218,14 @@ function HistoryItemRow({
 
 export function GenerationHistoryList() {
   const t = useTranslations("history")
-  const { data, isLoading, refetch } = trpc.generation.list.useQuery({ page: 1, pageSize: 50 })
+  const { data, isLoading, refetch } = trpc.generation.list.useQuery(
+    { page: 1, pageSize: 50 },
+    {
+      refetchInterval: (query) => query.state.data?.items.some(
+        (item) => item.status === "QUEUED" || item.status === "RUNNING",
+      ) ? 5000 : false,
+    },
+  )
 
   if (isLoading) {
     return (

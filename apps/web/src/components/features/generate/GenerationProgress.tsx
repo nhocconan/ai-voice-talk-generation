@@ -26,7 +26,12 @@ export function GenerationProgress({ generationId, onDone, onReset }: Props) {
   const [failed, setFailed] = useState(false)
   const [failHint, setFailHint] = useState<string | null>(null)
   const finishedRef = useRef(false)
+  const progressRef = useRef(0)
   const queuedSinceRef = useRef(Date.now())
+
+  useEffect(() => {
+    progressRef.current = progress
+  }, [progress])
 
   // Durable status from DB — survives SSE drops and silent worker outages.
   const { data: gen } = trpc.generation.get.useQuery(
@@ -44,10 +49,17 @@ export function GenerationProgress({ generationId, onDone, onReset }: Props) {
     if (!gen || finishedRef.current) return
 
     if (gen.status === "RUNNING") {
-      setPhase(t("statusRunning"))
-      if (progress < 5) setProgress(5)
+      const snapshot = gen.jobProgress
+      setPhase(snapshot?.message ?? t("statusRunning"))
+      if (snapshot) {
+        setProgress(Math.max(0, Math.min(100, Math.round(snapshot.progress * 100))))
+      } else if (progress < 5) {
+        setProgress(5)
+      }
     } else if (gen.status === "QUEUED") {
-      setPhase(t("statusQueued"))
+      const snapshot = gen.jobProgress
+      setPhase(snapshot?.message ?? t("statusQueued"))
+      if (snapshot) setProgress(Math.max(0, Math.min(100, Math.round(snapshot.progress * 100))))
       const waitedMs = Date.now() - queuedSinceRef.current
       if (waitedMs > 20_000) {
         setPhase(t("queuedStuckHint"))
@@ -110,14 +122,14 @@ export function GenerationProgress({ generationId, onDone, onReset }: Props) {
         {
           ts: new Date().toISOString(),
           phase: "INFO",
-          progress: progress / 100,
+          progress: progressRef.current / 100,
           message: t("sseDroppedHint"),
         },
       ])
     }
 
     return () => es.close()
-  }, [generationId, onDone, onReset, progress, t])
+  }, [generationId, onDone, onReset, t])
 
   if (failed) {
     return (

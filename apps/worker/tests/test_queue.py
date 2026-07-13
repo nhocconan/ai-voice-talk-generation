@@ -16,6 +16,23 @@ class FakeRedis:
         self.acks.append((stream_key, group, msg_id))
 
 
+class RecoveryRedis(FakeRedis):
+    def __init__(self, fields: dict[str, str], deliveries: int = 2) -> None:
+        super().__init__()
+        self.fields = fields
+        self.deliveries = deliveries
+        self.reads = 0
+
+    async def xreadgroup(self, *_args: object, **_kwargs: object) -> list:
+        self.reads += 1
+        if self.reads == 1:
+            return [["render", [["9-0", self.fields]]]]
+        return []
+
+    async def xpending_range(self, *_args: object, **_kwargs: object) -> list[dict]:
+        return [{"times_delivered": self.deliveries}]
+
+
 def test_decode_stream_message_supports_explicit_and_legacy_fields() -> None:
     explicit = decode_stream_message(
         {
@@ -130,3 +147,49 @@ async def test_queue_consumer_leaves_failed_jobs_pending() -> None:
     )
 
     assert redis.acks == []
+
+
+@pytest.mark.asyncio
+async def test_queue_consumer_recovers_pending_job_after_restart() -> None:
+    redis = RecoveryRedis({
+        "job": "render.generation",
+        "payload": json.dumps({"generationId": "gen-1"}),
+    })
+    consumer = QueueConsumer("render", "workers", "worker-test")
+    consumer._redis = redis
+    consumer._running = True
+    received: list[str] = []
+
+    async def handler(_job_name: str, payload: object) -> None:
+        assert isinstance(payload, dict)
+        received.append(str(payload["generationId"]))
+
+    consumer.register("render.generation", handler)
+
+    await consumer._recover_pending()
+
+    assert received == ["gen-1"]
+    assert redis.acks == [("render", "workers", "9-0")]
+
+
+@pytest.mark.asyncio
+async def test_queue_consumer_acks_pending_job_after_retry_limit() -> None:
+    redis = RecoveryRedis({
+        "job": "render.generation",
+        "payload": json.dumps({"generationId": "gen-1"}),
+    }, deliveries=4)
+    consumer = QueueConsumer("render", "workers", "worker-test")
+    consumer._redis = redis
+    consumer._running = True
+    called = False
+
+    async def handler(_job_name: str, _payload: object) -> None:
+        nonlocal called
+        called = True
+
+    consumer.register("render.generation", handler)
+
+    await consumer._recover_pending()
+
+    assert called is False
+    assert redis.acks == [("render", "workers", "9-0")]

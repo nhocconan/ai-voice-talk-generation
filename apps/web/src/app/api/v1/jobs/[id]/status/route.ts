@@ -10,6 +10,7 @@
 import { type NextRequest } from "next/server"
 import { db } from "@/server/db/client"
 import { apiError, apiOk, authenticate, isAuthError } from "@/server/api/rest"
+import { getJobProgress } from "@/server/services/job-progress"
 
 function isAdmin(role: string): boolean {
   return role === "ADMIN" || role === "SUPER_ADMIN"
@@ -27,16 +28,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!gen) return apiError(404, "NOT_FOUND", "Job not found")
   if (!isAdmin(auth.user.role) && gen.userId !== auth.user.id) return apiError(403, "FORBIDDEN", "Not allowed")
 
-  const progress = gen.status === "DONE" ? 1 : gen.status === "QUEUED" ? 0 : null
+  const snapshot = gen.status === "QUEUED" || gen.status === "RUNNING"
+    ? await getJobProgress(id)
+    : null
+  const progress = gen.status === "DONE" ? 1 : (snapshot?.progress ?? (gen.status === "QUEUED" ? 0 : null))
   return apiOk({
     status: gen.status,
-    phase: null,
+    phase: snapshot?.phase ?? null,
     progress,
-    message: null,
+    message: snapshot?.message ?? null,
     errorMessage: gen.errorMessage,
     durationMs: gen.durationMs,
     startedAt: gen.startedAt,
     finishedAt: gen.finishedAt,
-    updatedAt: gen.finishedAt ?? gen.startedAt ?? null,
+    updatedAt: snapshot?.ts ?? gen.finishedAt ?? gen.startedAt ?? null,
   })
 }
