@@ -552,7 +552,7 @@ export const PROVIDER_META: Record<string, ProviderMeta> = {
   XAI_TTS: {
     name: "xAI Grok TTS",
     shortName: "Grok",
-    tagline: "Low-cost xAI render lane. Set a default Voice ID here, then override per speaker on each generate form when needed.",
+    tagline: "Low-cost xAI render lane using account-validated Voice IDs pinned to voice profiles.",
     needsApiKey: true,
     docsLinks: [
       { label: "API Console", url: "https://console.x.ai" },
@@ -569,12 +569,12 @@ export const PROVIDER_META: Record<string, ProviderMeta> = {
     },
     setupSteps: [
       "Generate an xAI API key at console.x.ai → API Keys, paste it below, and click Test & Save — the worker pings GET /v1/tts/voices to confirm.",
-      "Create or choose the voice in xAI, then copy its Voice ID.",
-      "Paste the default Voice ID in the provider configuration below. This voice is used whenever a generate form leaves the xAI Voice ID field blank.",
-      "When xAI is selected for generation, each speaker can override the default with its own xAI Voice ID. Recorded profile samples are ignored for xAI.",
+      "Create or choose the custom voice in xAI, then copy its Voice ID from the voice card menu.",
+      "Create or edit a Voice Profile, paste the xAI Voice ID there, and save. Voice Studio validates it against the configured xAI team.",
+      "Select that profile when generating with xAI. The profile is the only source of the Voice ID; recorded samples are ignored for xAI.",
     ],
     helpsWith: [
-      "Default xAI voice with per-speaker generate-time overrides",
+      "Reusable profile-to-xAI custom voice mappings across every generation flow",
       "Cheapest cloud render lane: ~$4.2/1M chars ≈ $0.13 per 30-minute Vietnamese talk",
       "20-language multilingual narration with speech tag styling",
     ],
@@ -583,17 +583,9 @@ export const PROVIDER_META: Record<string, ProviderMeta> = {
       sampleRate: 24000,
       bitRate: 128000,
       textNormalization: false,
-      defaultVoiceId: "",
       maxChunkChars: 5000,
     },
     configFields: [
-      {
-        key: "defaultVoiceId",
-        label: "Default xAI Voice ID",
-        input: "text",
-        description: "Fallback Voice ID used when a generate form leaves the per-speaker xAI Voice ID blank.",
-        placeholder: "voice_...",
-      },
       {
         key: "codec",
         label: "Codec",

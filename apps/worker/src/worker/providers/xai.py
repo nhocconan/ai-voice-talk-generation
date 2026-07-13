@@ -50,9 +50,6 @@ class XAITTSProvider:
     def _language(self, lang: str) -> str:
         return lang if lang in _LANG_PASSTHROUGH else "auto"
 
-    def _default_voice_id(self) -> str:
-        return str(self._config.get("defaultVoiceId", "")).strip()
-
     async def prepare_voice(self, samples: list[Path]) -> VoiceRef:
         raise RuntimeError("xAI requires a saved Voice ID; sample-based cloning is not supported.")
 
@@ -62,9 +59,9 @@ class XAITTSProvider:
         if not self._api_key:
             raise RuntimeError("xAI API key not configured")
 
-        voice_id = str(voice.data.get("voice_id") or "").strip() or self._default_voice_id()
+        voice_id = str(voice.data.get("voice_id") or "").strip()
         if not voice_id:
-            raise RuntimeError("xAI requires a per-speaker Voice ID or provider defaultVoiceId.")
+            raise RuntimeError("xAI requires a provider Voice ID on the selected voice profile.")
         body = {
             "text": text,
             "voice_id": voice_id,
