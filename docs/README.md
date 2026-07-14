@@ -14,6 +14,7 @@ This directory is the single source of truth for product, architecture, and deli
 | [WORKFLOW.md](./WORKFLOW.md) | Task lifecycle: pick → build → test → review → mark done | All |
 | [TASKS.md](./TASKS.md) | Phased task list with checkboxes, owners, DoD links | All |
 | [DESIGN_TOKENS.md](./DESIGN_TOKENS.md) | Concrete design tokens derived from `DESIGN.md` | Designers, FE |
+| [XAI_VOICE_RECORDING_GUIDE.html](./XAI_VOICE_RECORDING_GUIDE.html) | Shareable Vietnamese/English iPhone recording guide for xAI custom voice profiles | Voice talent, admins |
 
 ## Reading order
 

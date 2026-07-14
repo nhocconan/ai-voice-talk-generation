@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#11100e" />
+    <title>Voice Studio — Hướng dẫn thu giọng chuẩn</title>
+    <style>
+      :root {
+        --ink: #f4efe5;
+        --muted: #aaa397;
+        --paper: #11100e;
+        --paper-2: #191713;
+        --line: rgba(244, 239, 229, 0.15);
+        --accent: #d9ff64;
+        --accent-ink: #11100e;
+        --serif: Iowan Old Style, Baskerville, Times New Roman, serif;
+        --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 76% 0%, rgba(217, 255, 100, 0.08), transparent 26rem),
+          var(--paper);
+        font-family: var(--sans);
+        line-height: 1.65;
+      }
+      button, a { font: inherit; }
+      a { color: inherit; }
+      .shell { width: min(1180px, calc(100% - 40px)); margin: 0 auto; }
+      .eyebrow {
+        margin: 0 0 18px;
+        color: var(--accent);
+        font-size: 0.74rem;
+        font-weight: 750;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+      header {
+        min-height: 92svh;
+        display: flex;
+        align-items: end;
+        border-bottom: 1px solid var(--line);
+        overflow: hidden;
+        position: relative;
+      }
+      header::after {
+        content: "";
+        position: absolute;
+        inset: auto -5% 9% 45%;
+        height: 42%;
+        opacity: 0.28;
+        background: repeating-linear-gradient(90deg, var(--accent) 0 2px, transparent 2px 15px);
+        clip-path: polygon(0 45%, 5% 30%, 10% 62%, 15% 12%, 20% 76%, 25% 34%, 30% 57%, 35% 9%, 40% 69%, 45% 27%, 50% 86%, 55% 42%, 60% 58%, 65% 17%, 70% 74%, 75% 38%, 80% 63%, 85% 23%, 90% 72%, 95% 43%, 100% 54%, 100% 56%, 0 47%);
+        pointer-events: none;
+      }
+      .hero { padding: 96px 0 76px; position: relative; z-index: 1; }
+      .brand { font-size: 0.82rem; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; }
+      h1 {
+        max-width: 930px;
+        margin: 78px 0 28px;
+        font: 400 clamp(3.5rem, 9vw, 8rem)/0.88 var(--serif);
+        letter-spacing: -0.055em;
+      }
+      .hero-copy { max-width: 580px; color: var(--muted); font-size: clamp(1rem, 2vw, 1.18rem); }
+      .hero-meta { display: flex; flex-wrap: wrap; gap: 14px 30px; margin-top: 38px; font-size: 0.82rem; }
+      .hero-meta span::before { content: "●"; color: var(--accent); margin-right: 9px; }
+
+      .layout { display: grid; grid-template-columns: 230px minmax(0, 760px); gap: 90px; padding: 88px 0 140px; }
+      nav { position: sticky; top: 28px; align-self: start; }
+      nav a { display: block; padding: 8px 0; color: var(--muted); text-decoration: none; font-size: 0.86rem; }
+      nav a:hover { color: var(--accent); }
+      nav .nav-title { color: var(--ink); margin-bottom: 12px; font-weight: 700; }
+      main section { padding: 0 0 92px; scroll-margin-top: 34px; }
+      h2 { margin: 0 0 26px; font: 400 clamp(2.2rem, 5vw, 4rem)/1 var(--serif); letter-spacing: -0.035em; }
+      h3 { margin: 38px 0 12px; font-size: 1rem; }
+      p { margin: 0 0 18px; }
+      .lead { color: var(--muted); font-size: 1.08rem; }
+      .rule { border-top: 1px solid var(--line); }
+      .steps { margin: 36px 0 0; padding: 0; list-style: none; counter-reset: steps; }
+      .steps li {
+        counter-increment: steps;
+        display: grid;
+        grid-template-columns: 64px 1fr;
+        gap: 18px;
+        padding: 24px 0;
+        border-top: 1px solid var(--line);
+      }
+      .steps li::before { content: "0" counter(steps); color: var(--accent); font: 400 1.2rem var(--serif); }
+      .steps strong { display: block; margin-bottom: 5px; }
+      .steps span { color: var(--muted); }
+      .signal {
+        margin: 34px 0;
+        padding: 24px 0 24px 26px;
+        border-left: 2px solid var(--accent);
+        font: 400 1.3rem/1.45 var(--serif);
+      }
+      .do-dont { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 34px; }
+      .do-dont > div { border-top: 1px solid var(--line); padding-top: 20px; }
+      .do-dont ul, .checklist { margin: 12px 0 0; padding: 0; list-style: none; }
+      .do-dont li { margin: 11px 0; color: var(--muted); }
+      .do li::before { content: "+"; color: var(--accent); margin-right: 10px; }
+      .dont li::before { content: "×"; color: #ff927a; margin-right: 10px; }
+
+      .language-tabs { display: flex; gap: 8px; margin: 30px 0 22px; }
+      .tab, .copy {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 10px 16px;
+        color: var(--ink);
+        background: transparent;
+        cursor: pointer;
+      }
+      .tab[aria-selected="true"] { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+      .script-panel { display: none; }
+      .script-panel.active { display: block; animation: rise 320ms ease-out; }
+      .script-head { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin: 20px 0; }
+      .duration { color: var(--muted); font-size: 0.82rem; }
+      .copy:hover { border-color: var(--accent); color: var(--accent); }
+      .script {
+        padding: clamp(24px, 5vw, 50px);
+        color: #201e19;
+        background: #eee8da;
+        border-radius: 2px;
+        font: 400 clamp(1.15rem, 2.3vw, 1.42rem)/1.75 var(--serif);
+      }
+      .script p { margin-bottom: 1.2em; }
+      .script p:last-child { margin-bottom: 0; }
+      #vi-text {
+        font-family: var(--sans);
+        font-size: clamp(1.05rem, 2vw, 1.24rem);
+        font-weight: 430;
+        line-height: 1.82;
+        letter-spacing: -0.012em;
+      }
+      .direction { color: #756d5e; font: 600 0.68rem/1 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; }
+      .note { margin-top: 16px; color: var(--muted); font-size: 0.84rem; }
+
+      .checklist li { display: flex; gap: 13px; padding: 15px 0; border-top: 1px solid var(--line); }
+      .checklist input { width: 19px; height: 19px; margin-top: 3px; accent-color: var(--accent); }
+      .format-line { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+      .format-line span { padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 0.8rem; }
+      footer { border-top: 1px solid var(--line); padding: 40px 0 70px; color: var(--muted); font-size: 0.78rem; }
+      footer a { text-underline-offset: 3px; }
+      @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+      @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .script-panel.active { animation: none; } }
+      @media (max-width: 780px) {
+        .shell { width: min(100% - 28px, 680px); }
+        header { min-height: 82svh; }
+        header::after { inset-left: 20%; }
+        h1 { margin-top: 56px; }
+        .layout { display: block; padding-top: 62px; }
+        nav { display: none; }
+        main section { padding-bottom: 72px; }
+        .do-dont { grid-template-columns: 1fr; }
+        .script-head { align-items: end; }
+      }
+      @media print {
+        :root { --ink: #111; --muted: #555; --paper: #fff; --paper-2: #fff; --line: #ccc; }
+        body { background: #fff; }
+        header { min-height: auto; } header::after, nav, .language-tabs, .copy { display: none; }
+        .hero { padding: 35px 0; } h1 { margin: 35px 0 20px; font-size: 54px; }
+        .layout { display: block; padding: 40px 0; }
+        main section { break-inside: avoid; padding-bottom: 50px; }
+        .script-panel { display: block; margin-bottom: 36px; }
+        .script { border: 1px solid #bbb; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="shell hero">
+        <div class="brand">Voice Studio</div>
+        <h1>Thu một lần.<br />Giữ đúng chất giọng.</h1>
+        <p class="hero-copy">Hướng dẫn thu mẫu giọng bằng iPhone để tạo voice profile tự nhiên, rõ và sang trọng cho nội dung tiếng Việt hoặc tiếng Anh.</p>
+        <div class="hero-meta"><span>90–120 giây mỗi ngôn ngữ</span><span>Một người nói</span><span>Không nhạc, không tiếng vang</span></div>
+      </div>
+    </header>
+
+    <div class="shell layout">
+      <nav aria-label="Mục lục">
+        <div class="nav-title">Trong 5 phút</div>
+        <a href="#strategy">Chọn bản thu</a>
+        <a href="#setup">Chuẩn bị iPhone</a>
+        <a href="#delivery">Cách đọc</a>
+        <a href="#scripts">Bài đọc mẫu</a>
+        <a href="#check">Kiểm tra &amp; gửi</a>
+      </nav>
+
+      <main>
+        <section id="strategy">
+          <p class="eyebrow">01 — Chọn đúng bản thu</p>
+          <h2>Mỗi ngôn ngữ nên có một file riêng.</h2>
+          <p class="lead">Nếu giọng sẽ nói cả tiếng Việt lẫn tiếng Anh, hãy thu hai bản độc lập. Cách này giữ trọn dấu tiếng Việt, phụ âm tiếng Anh và nhịp nói tự nhiên của từng ngôn ngữ.</p>
+          <div class="signal">Chất lượng cao nhất: tạo hai profile cho cùng một người — một profile tiếng Việt, một profile tiếng Anh.</div>
+          <p>Chỉ dùng một bản song ngữ khi sản phẩm chủ yếu nói đan xen hai ngôn ngữ trong cùng một câu. Khi đó, vẫn giữ tổng thời lượng dưới 120 giây và chia thời lượng theo tỷ lệ sử dụng thực tế.</p>
+        </section>
+
+        <section id="setup" class="rule">
+          <p class="eyebrow">02 — Chuẩn bị</p>
+          <h2>Biến căn phòng thành một studio nhỏ.</h2>
+          <ol class="steps">
+            <li><div><strong>Chọn phòng nhỏ, nhiều vật liệu mềm.</strong><span>Phòng ngủ có rèm, chăn, sofa tốt hơn bếp, phòng họp kính hoặc phòng trống. Đóng cửa sổ; tắt quạt, máy lạnh, TV và mọi thông báo.</span></div></li>
+            <li><div><strong>Đặt iPhone đúng khoảng cách.</strong><span>Tháo ốp nếu che micro. Đặt máy cố định, cạnh dưới hướng về miệng, cách khoảng 15–20 cm và lệch sang một bên 20–30° để giảm tiếng bật hơi “p”, “b”. Không cầm máy trên tay.</span></div></li>
+            <li><div><strong>Mở Voice Memos và chọn Mono.</strong><span>Trong Settings → Apps → Voice Memos → Recording Mode, chọn Mono nếu máy có tùy chọn này. Bật Silent Mode. Không dùng tai nghe Bluetooth; micro iPhone thường sạch và ổn định hơn.</span></div></li>
+            <li><div><strong>Thu thử 10 giây.</strong><span>Đọc với âm lượng bình thường, nghe lại bằng tai nghe. Giọng phải gần, rõ, không méo, không ù và không có tiếng phòng vang phía sau.</span></div></li>
+          </ol>
+        </section>
+
+        <section id="delivery" class="rule">
+          <p class="eyebrow">03 — Cách đọc</p>
+          <h2>Đọc như đang nói với một người thông minh.</h2>
+          <p class="lead">Mẫu clone sẽ học cả âm sắc lẫn cách bạn ngắt câu, nhấn chữ và biểu lộ cảm xúc. Đừng cố làm “giọng phát thanh” nếu đó không phải chất giọng bạn muốn dùng về sau.</p>
+          <div class="do-dont">
+            <div class="do"><strong>Nên</strong><ul><li>Giữ năng lượng ấm, tự tin, chuyên nghiệp</li><li>Phát âm trọn chữ nhưng không gồng</li><li>Thay đổi nhẹ tốc độ và cao độ theo ý nghĩa</li><li>Dừng tự nhiên ở dấu phẩy và hết câu</li><li>Đọc lại toàn bộ nếu ho, vấp hoặc có tiếng động</li></ul></div>
+            <div class="dont"><strong>Không nên</strong><ul><li>Đọc đều đều như học thuộc lòng</li><li>Thì thầm, hét hoặc diễn quá mức</li><li>Đưa điện thoại sát miệng</li><li>Chỉnh giọng, khử ồn hay thêm hiệu ứng</li><li>Ghép nhiều đoạn có âm lượng khác nhau</li></ul></div>
+          </div>
+        </section>
+
+        <section id="scripts" class="rule">
+          <p class="eyebrow">04 — Bài đọc mẫu</p>
+          <h2>Chọn một ngôn ngữ. Đọc từ đầu đến cuối.</h2>
+          <p class="lead">Mỗi bài được viết để tạo đủ câu ngắn, câu dài, số, tên riêng, câu hỏi và nhiều sắc thái — nhưng vẫn nghe như lời nói thật.</p>
+          <div class="language-tabs" role="tablist" aria-label="Chọn ngôn ngữ">
+            <button class="tab" role="tab" aria-selected="true" aria-controls="vi-script" id="vi-tab">Tiếng Việt</button>
+            <button class="tab" role="tab" aria-selected="false" aria-controls="en-script" id="en-tab">English</button>
+          </div>
+
+          <article class="script-panel active" id="vi-script" role="tabpanel" aria-labelledby="vi-tab">
+            <div class="script-head"><span class="duration">Mục tiêu: 95–115 giây</span><button class="copy" data-copy="vi-text">Sao chép bài đọc</button></div>
+            <div class="script" id="vi-text">
+              <p><span class="direction">Ấm áp, tự nhiên</span><br />Xin chào. Hôm nay, tôi muốn kể bạn nghe về một buổi sáng rất bình thường, nhưng lại khiến tôi nhớ rất lâu. Thành phố vừa thức giấc; ánh nắng đi qua hàng cây, tiếng xe còn thưa, và mùi cà phê mới pha lan nhẹ trong căn phòng.</p>
+              <p><span class="direction">Rõ ràng, chuyên nghiệp</span><br />Khi bắt đầu một công việc quan trọng, tôi thường làm ba việc: xác định mục tiêu, sắp xếp ưu tiên, rồi dành trọn sự tập trung cho bước tiếp theo. Một kế hoạch tốt không cần phức tạp. Nó chỉ cần rõ ràng, thực tế và đủ linh hoạt để thay đổi khi có thông tin mới.</p>
+              <p><span class="direction">Tươi hơn một chút</span><br />Điều thú vị là những ý tưởng hay đôi khi xuất hiện vào lúc ta ít mong đợi nhất. Có thể là lúc tám giờ mười lăm phút, trên đường đến cuộc hẹn; hoặc khi một người bạn bất ngờ hỏi: “Nếu được làm lại từ đầu, bạn sẽ chọn điều gì?”</p>
+              <p><span class="direction">Điềm tĩnh, tin cậy</span><br />Câu trả lời của tôi rất đơn giản: hãy lắng nghe kỹ hơn, nói điều cần nói, và giữ lời hứa của mình. Công nghệ có thể giúp chúng ta đi nhanh, nhưng sự tử tế và óc phán đoán mới giúp chúng ta đi đúng hướng.</p>
+              <p><span class="direction">Chậm hơn, giàu hình ảnh</span><br />Hãy hình dung một chiều cuối tuần ở Đà Lạt. Trời mát, mây thấp, và cơn mưa vừa đủ làm mặt đường sáng lên dưới những ngọn đèn. Trong một cửa hàng nhỏ, cô chủ cẩn thận gói mười hai món quà, ghi từng cái tên, rồi nhắc người giao hàng đến trước sáu giờ ba mươi. Mọi chi tiết đều giản dị, nhưng khi được làm bằng sự quan tâm, chúng tạo nên một trải nghiệm mà người khác muốn nhớ và muốn kể lại.</p>
+              <p><span class="direction">Kết nhẹ, có nụ cười</span><br />Cảm ơn bạn đã dành thời gian lắng nghe. Tôi hy vọng giọng nói này sẽ mang đến cảm giác gần gũi, sáng rõ và đáng tin cậy — dù đang kể một câu chuyện, giải thích một ý tưởng, hay đơn giản là nói: chúc bạn một ngày thật tốt lành.</p>
+            </div>
+            <p class="note">Đọc phần nội dung; không đọc các nhãn hướng dẫn màu xám.</p>
+          </article>
+
+          <article class="script-panel" id="en-script" role="tabpanel" aria-labelledby="en-tab">
+            <div class="script-head"><span class="duration">Target: 95–115 seconds</span><button class="copy" data-copy="en-text">Copy script</button></div>
+            <div class="script" id="en-text" lang="en">
+              <p><span class="direction">Warm and natural</span><br />Hello. Today, I’d like to tell you about an ordinary morning that stayed with me. The city was just waking up; sunlight moved through the trees, the streets were still quiet, and the smell of fresh coffee drifted across the room.</p>
+              <p><span class="direction">Clear and professional</span><br />Whenever I begin an important project, I do three things: define the goal, choose the priorities, and give my full attention to the next useful step. A good plan doesn’t need to be complicated. It needs to be clear, realistic, and flexible enough to change when better information arrives.</p>
+              <p><span class="direction">A little brighter</span><br />The funny thing is, great ideas often appear when we least expect them. It might happen at eight fifteen, on the way to a meeting, or when a friend suddenly asks, “If you could begin again, what would you choose?”</p>
+              <p><span class="direction">Calm and reassuring</span><br />My answer is simple: listen more carefully, say what matters, and keep your promises. Technology can help us move faster, but kindness and sound judgment help us move in the right direction.</p>
+              <p><span class="direction">Finish with a gentle smile</span><br />Thank you for taking the time to listen. I hope this voice feels warm, articulate, and trustworthy—whether it is telling a story, explaining an idea, guiding someone through a difficult moment, or simply saying: I hope you have a wonderful day.</p>
+            </div>
+            <p class="note">Read the main text only; do not read the gray direction labels.</p>
+          </article>
+        </section>
+
+        <section id="check" class="rule">
+          <p class="eyebrow">05 — Trước khi gửi</p>
+          <h2>Nghe lại một lần bằng tai nghe.</h2>
+          <ul class="checklist">
+            <li><input type="checkbox" id="c1" /><label for="c1">Chỉ có một giọng nói; không nhạc, không tiếng người khác.</label></li>
+            <li><input type="checkbox" id="c2" /><label for="c2">Không có tiếng quạt, máy lạnh, thông báo, rung bàn hoặc tiếng vang rõ.</label></li>
+            <li><input type="checkbox" id="c3" /><label for="c3">Không vấp, ho, hắng giọng, cắt mất chữ đầu hoặc cuối.</label></li>
+            <li><input type="checkbox" id="c4" /><label for="c4">Âm lượng đều; các âm “p”, “b”, “s” không nổ hoặc chói.</label></li>
+            <li><input type="checkbox" id="c5" /><label for="c5">Bản thu dài 90–120 giây và nghe đúng phong cách muốn dùng về sau.</label></li>
+            <li><input type="checkbox" id="c6" /><label for="c6">Người nói đã đồng ý rõ ràng cho việc tạo và sử dụng voice clone.</label></li>
+          </ul>
+          <h3>Cách gửi</h3>
+          <p>Trong Voice Memos, đổi tên file theo mẫu <strong>HọTên_NgônNgữ_Ngày</strong>, chọn Share và gửi file gốc. Không gửi qua ứng dụng tự nén thành tin nhắn thoại; không chuyển đổi, lọc nhiễu hoặc tăng âm lượng trước khi gửi.</p>
+          <div class="format-line"><span>Ưu tiên file gốc .m4a</span><span>90–120 giây</span><span>Một file / ngôn ngữ</span></div>
+        </section>
+      </main>
+    </div>
+
+    <footer>
+      <div class="shell">Khuyến nghị kỹ thuật dựa trên tài liệu <a href="https://docs.x.ai/developers/model-capabilities/audio/custom-voices">xAI Custom Voices</a> và <a href="https://support.apple.com/guide/iphone/iph4d2a39a3b/ios">Apple Voice Memos</a>, truy cập tháng 7/2026. xAI chấp nhận M4A và giới hạn mẫu tham chiếu tối đa 120 giây.</div>
+    </footer>
+
+    <script>
+      const tabs = document.querySelectorAll(".tab");
+      const panels = document.querySelectorAll(".script-panel");
+
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          tabs.forEach((item) => item.setAttribute("aria-selected", String(item === tab)));
+          panels.forEach((panel) => panel.classList.toggle("active", panel.id === tab.getAttribute("aria-controls")));
+        });
+      });
+
+      document.querySelectorAll(".copy").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const source = document.getElementById(button.dataset.copy);
+          const text = Array.from(source.querySelectorAll("p"))
+            .map((paragraph) => paragraph.cloneNode(true))
+            .map((paragraph) => {
+              paragraph.querySelectorAll(".direction").forEach((label) => label.remove());
+              return paragraph.textContent.trim();
+            })
+            .join("\n\n");
+          await navigator.clipboard.writeText(text);
+          const original = button.textContent;
+          button.textContent = document.documentElement.lang === "vi" ? "Đã sao chép" : "Copied";
+          window.setTimeout(() => { button.textContent = original; }, 1600);
+        });
+      });
+    </script>
+  </body>
+</html>
