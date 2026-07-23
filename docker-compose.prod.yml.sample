@@ -166,9 +166,36 @@ services:
     image: voice-studio-web:prod
     container_name: vc-web
     restart: unless-stopped
-    env_file: .env.prod
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 200
+    mem_limit: 2g
+    cpus: "2.0"
+    tmpfs:
+      # Keep runtime scratch/cache writable without allowing dropped binaries
+      # to execute or persist in the container layer.
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
+      - /app/apps/web/.next/cache:rw,noexec,nosuid,nodev,size=256m,uid=100,gid=101,mode=0755
     environment:
       NODE_ENV: production
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set in .env.prod}
+      AUTH_TRUST_HOST: ${AUTH_TRUST_HOST:-true}
+      SERVER_SECRET: ${SERVER_SECRET:?SERVER_SECRET must be set in .env.prod}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN must be set in .env.prod}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GEMINI_TEXT_MODEL: ${GEMINI_TEXT_MODEL:-gemini-2.5-flash}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://localhost:11434/v1}
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-}
+      APNS_PRIVATE_KEY: ${APNS_PRIVATE_KEY:-}
+      APNS_HOST: ${APNS_HOST:-api.sandbox.push.apple.com}
       # Use container_names (vc-postgres/vc-redis/vc-minio/vc-worker) — NOT the
       # service names (postgres/redis/minio/worker). web is on the external
       # traefik-network, which other projects also attach to, exposing THEIR

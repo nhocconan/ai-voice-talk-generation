@@ -25,7 +25,7 @@ Pinned versions are intentional — see `CODING_GUIDELINES.md` for upgrade polic
 | Layer | Choice | Version | Notes |
 |---|---|---|---|
 | Runtime | Node.js | 22 LTS | |
-| Framework | Next.js | 15.x (App Router) | RSC by default; client components only when needed |
+| Framework | Next.js | 15.5.21 (App Router) | Maintenance LTS security release; RSC by default |
 | UI | React | 19.x | |
 | Language | TypeScript | 5.6+ | `strict: true`, `noUncheckedIndexedAccess: true` |
 | Styling | Tailwind CSS | 4.x | CSS-first config via `@theme` |
@@ -84,6 +84,14 @@ Pinned versions are intentional — see `CODING_GUIDELINES.md` for upgrade polic
 | Observability | Prometheus + Grafana (optional Loki) | |
 | Errors | Sentry | self-hosted optional |
 | Email (invites) | Resend | API |
+
+The production web container runs with a read-only root filesystem, all Linux
+capabilities dropped, `no-new-privileges`, bounded CPU/memory/PIDs, and
+non-executable `tmpfs` mounts for `/tmp` and the Next.js runtime cache. These
+controls limit persistence and resource abuse if an application-layer
+vulnerability is exploited. Its environment is explicitly allow-listed so
+worker-only and infrastructure-only secrets are not injected into the public
+web process.
 
 ## Rationale (Why These Choices)
 
@@ -185,3 +193,4 @@ WORKER_CONCURRENCY=1
 - 2026-04-19: Updated queue transport to Redis Streams and aligned worker/web contract notes with the implementation.
 - 2026-04-20: Added VieNeu-TTS and VoxCPM2 to the supported provider matrix and local Mac deployment guidance.
 - 2026-07-09: Recorded `MINIMAX_API_KEY` / `XAI_API_KEY` / `XIAOMI_API_KEY` as optional worker env fallbacks, and ffmpeg-with-libass as a worker runtime requirement for audiogram captions. Working tree, pending commit.
+- 2026-07-23: Upgraded Next.js to the 15.5.21 maintenance security release and documented production web-container confinement controls.
